@@ -17,6 +17,8 @@ load_dotenv()
 # The second argument is the default value if the variable is missing
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-in-production")
 
 # These are simple warnings that print at startup
