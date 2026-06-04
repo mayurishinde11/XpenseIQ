@@ -1,9 +1,8 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# Import our expense router
 from routers.expense_router import router as expense_router
+from routers.auth_router import router as auth_router
 
 app = FastAPI(
     title="XpenseIQ API",
@@ -19,8 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register the expense router with our app
-# Now all routes in expense_router.py are active
+# Register both routers
+app.include_router(auth_router)
 app.include_router(expense_router)
 
 @app.get("/")
