@@ -4,7 +4,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, JSON
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+#from sqlalchemy.orm import relationship
 from database import Base
 
 class Expense(Base):
@@ -61,4 +61,3 @@ class Expense(Base):
     # relationship() lets us access the user object from an expense
     # For example: expense.user.email
     # This doesn't create a new column - it's just a Python convenience
-    user = relationship("User", backref="expenses")

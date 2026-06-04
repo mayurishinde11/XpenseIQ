@@ -144,3 +144,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
             "confidence_score": 0.0,
             "word_count": 0
         }
+    
+
+
+    
