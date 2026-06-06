@@ -1,0 +1,53 @@
+# Dockerfile.backend
+# This file tells Docker how to build our FastAPI backend container.
+# Every line is an instruction Docker executes in order.
+
+# FROM — start with an official Python image
+# python:3.11-slim is a lightweight Python 3.11 installation
+# "slim" means it has the minimum required packages — smaller size
+FROM python:3.11-slim
+
+# Set environment variables
+# PYTHONDONTWRITEBYTECODE — don't create .pyc files (saves space)
+# PYTHONUNBUFFERED — print logs immediately without buffering
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+# These are Linux packages our app needs
+# tesseract-ocr — the OCR engine
+# poppler-utils — for PDF processing
+# libpq-dev — for PostgreSQL connection
+# gcc — compiler needed by some Python packages
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# WORKDIR — set the working directory inside the container
+# All subsequent commands run from this directory
+WORKDIR /app
+
+# COPY requirements.txt first
+# We copy this before the rest of the code because Docker
+# caches each layer. If requirements don't change, Docker
+# won't reinstall packages on every build — much faster.
+COPY backend/requirements.txt .
+
+# Install Python packages
+RUN pip install --no-cache-dir -r requirements.txt
+
+# COPY the rest of the backend code into the container
+COPY backend/ .
+
+# EXPOSE tells Docker which port our app listens on
+# This doesn't publish the port — it's just documentation
+EXPOSE 8000
+
+# CMD — the command that runs when the container starts
+# This starts our FastAPI server on port 8000
+# host 0.0.0.0 means accept connections from anywhere
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

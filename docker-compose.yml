@@ -1,0 +1,38 @@
+# docker-compose.yml
+# This file defines all our services and how they connect.
+# Run with: docker-compose up
+
+version: '3.8'
+
+services:
+
+  # Backend service — FastAPI
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      # Map port 8000 on host to port 8000 in container
+      - "8000:8000"
+    env_file:
+      # Load environment variables from .env file
+      - .env
+    restart: unless-stopped
+
+  # Frontend service — Streamlit
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      # Map port 8501 on host to port 8501 in container
+      - "8501:8501"
+    environment:
+      # Tell frontend where the backend is
+      # Inside Docker network, services talk to each other
+      # by service name instead of localhost
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      # Start backend first, then frontend
+      - backend
+    restart: unless-stopped
