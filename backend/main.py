@@ -22,13 +22,11 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(expense_router)
 
+# 
 @app.get("/")
 def root():
-    return {
-        "message": "XpenseIQ API is running",
-        "version": "1.0.0",
-        "status": "healthy"
-    }
+    return {"status": "running"}
+
 
 @app.get("/health")
 def health_check():
