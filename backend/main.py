@@ -22,31 +22,14 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(expense_router)
 
-# 
 @app.get("/")
 def root():
-    return {"status": "running"}
-
+    return {
+        "message": "XpenseIQ API is running",
+        "version": "1.0.0",
+        "status": "healthy"
+    }
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-@app.get("/")
-def home():
-    return {
-        "message": "XpenseIQ API Running"
-    }
-
-import os
-import uvicorn
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=False
-    )
