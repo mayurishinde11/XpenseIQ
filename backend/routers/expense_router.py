@@ -8,11 +8,11 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
+from dependencies import get_current_user  # ← shared dependency, no circular import
 from services.ocr_service import extract_text_from_image, extract_text_from_pdf
 from services.ai_service import extract_expense_data, classify_expense
 from services.fraud_service import check_fraud
 from models.expense import Expense
-from routers.auth_router import get_current_user
 
 router = APIRouter(
     prefix="/expenses",
@@ -191,51 +191,32 @@ def get_all_expenses(
         Expense.user_id == current_user.id
     )
 
-    # Apply each filter only if it was provided
     if vendor_name:
-        # ilike = case insensitive search
-        # % = wildcard (matches anything before/after)
-        query = query.filter(
-            Expense.vendor_name.ilike(f"%{vendor_name}%")
-        )
+        query = query.filter(Expense.vendor_name.ilike(f"%{vendor_name}%"))
 
     if category:
-        query = query.filter(
-            Expense.primary_category.ilike(f"%{category}%")
-        )
+        query = query.filter(Expense.primary_category.ilike(f"%{category}%"))
 
     if start_date:
-        query = query.filter(
-            Expense.transaction_date >= start_date
-        )
+        query = query.filter(Expense.transaction_date >= start_date)
 
     if end_date:
-        query = query.filter(
-            Expense.transaction_date <= end_date
-        )
+        query = query.filter(Expense.transaction_date <= end_date)
 
     if min_amount:
-        query = query.filter(
-            Expense.total_amount >= min_amount
-        )
+        query = query.filter(Expense.total_amount >= min_amount)
 
     if max_amount:
-        query = query.filter(
-            Expense.total_amount <= max_amount
-        )
+        query = query.filter(Expense.total_amount <= max_amount)
 
     if requires_review is not None:
-        query = query.filter(
-            Expense.requires_manual_review == requires_review
-        )
+        query = query.filter(Expense.requires_manual_review == requires_review)
 
     # Order by most recent first
     query = query.order_by(Expense.created_at.desc())
 
-    # Execute query
     expenses = query.all()
 
-    # Calculate summary statistics
     total_spend = sum(e.total_amount for e in expenses if e.total_amount)
     flagged_count = sum(1 for e in expenses if e.requires_manual_review)
 
@@ -300,19 +281,16 @@ def get_expense_summary(
             "payment_method_breakdown": {}
         }
 
-    # Calculate totals
     total_spend = sum(e.total_amount for e in expenses if e.total_amount)
     flagged_count = sum(1 for e in expenses if e.requires_manual_review)
     avg_transaction = total_spend / len(expenses) if expenses else 0
 
-    # Category breakdown
     category_breakdown = {}
     for e in expenses:
         if e.primary_category and e.total_amount:
             cat = e.primary_category
             category_breakdown[cat] = category_breakdown.get(cat, 0) + e.total_amount
 
-    # Payment method breakdown
     payment_breakdown = {}
     for e in expenses:
         if e.payment_method:

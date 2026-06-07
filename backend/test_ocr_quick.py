@@ -13,6 +13,7 @@ from services.ocr_service import extract_text_from_image
 # Path to our test receipt image
 # Make sure this file exists in your project root folder
 IMAGE_PATH = r"C:\Users\ASUS\Desktop\XpenseIQ\test_receipt.jpg"
+
 print("Testing OCR Service...")
 print("=" * 50)
 

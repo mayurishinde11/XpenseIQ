@@ -11,7 +11,6 @@ import re
 # Tell pytesseract where Tesseract is installed
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-
 def extract_text_from_image(image_bytes: bytes) -> dict:
     """
     Takes raw image bytes and extracts text using Tesseract OCR.

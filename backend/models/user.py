@@ -14,6 +14,7 @@ class User(Base):
     # __tablename__ tells SQLAlchemy what to name the table
     # in the actual database
     __tablename__ = "users"
+    __table_args__ = {'extend_existing': True}  
 
     # Each Column() call creates one column in the table
 
