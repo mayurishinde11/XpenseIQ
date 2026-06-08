@@ -58,12 +58,14 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
     """
     try:
         from pdf2image import convert_from_bytes
+        import os
+        poppler_path = None if os.name != 'nt' else r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
 
         # Convert PDF pages to list of PIL Images
         # poppler_path tells pdf2image where poppler is installed
         images = convert_from_bytes(
             pdf_bytes,
-            poppler_path=r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
+            poppler_path=poppler_path
         )
 
         all_text = ""
