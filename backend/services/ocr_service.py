@@ -1,3 +1,50 @@
+def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
+    """
+    Validates a file before sending it to OCR.
+    Prevents processing empty, blank, or invalid files.
+    Returns a dict with is_valid and reason.
+    """
+    import numpy as np
+
+    # Check 1 — File must not be empty
+    if len(file_bytes) < 5000:
+        return {
+            "is_valid": False,
+            "reason": "File is too small or empty. Please upload a valid receipt image."
+        }
+
+    # Check 2 — For images, check if it's completely blank
+    if content_type in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
+        try:
+            image = Image.open(io.BytesIO(file_bytes))
+            image = image.convert("RGB")
+
+            # Convert to numpy array and check variance
+            img_array = np.array(image)
+
+            # If variance is very low, image is blank or single color
+            variance = np.var(img_array)
+            if variance < 100:
+                return {
+                    "is_valid": False,
+                    "reason": "Image appears to be blank or empty. Please upload a clear receipt photo."
+                }
+
+        except Exception:
+            return {
+                "is_valid": False,
+                "reason": "Could not read the image file. Please upload a valid JPG or PNG."
+            }
+
+    # Check 3 — PDF must have readable content
+    if content_type == "application/pdf":
+        if len(file_bytes) < 10000:
+            return {
+                "is_valid": False,
+                "reason": "PDF file appears to be empty or corrupted."
+            }
+
+    return {"is_valid": True, "reason": None}
 # ocr_service.py
 # Updated to support:
 # - Images: JPG, PNG, WEBP, TIFF, BMP
@@ -7,7 +54,9 @@ import pytesseract
 from PIL import Image
 import io
 import re
-
+import os
+if os.name == 'nt':  # Windows only
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # Tell pytesseract where Tesseract is installed
 #pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 

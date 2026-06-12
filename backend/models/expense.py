@@ -54,6 +54,11 @@ class Expense(Base):
  
     # Date of the actual transaction on the receipt
     transaction_date = Column(String, nullable=True)
+        # Status of the expense
+    # approved = clean bill, counted in totals
+    # pending_verification = suspicious, awaiting review
+    # rejected = rejected by admin, excluded from totals
+    status = Column(String, default="approved", nullable=False)
  
     # When this record was created in our system
     created_at = Column(DateTime(timezone=True), server_default=func.now())
