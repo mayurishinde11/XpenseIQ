@@ -1,13 +1,5 @@
-# # expense_router.py
-# # Complete expense API with:
-# # - File validation BEFORE OCR (prevents wasted processing)
-# # - Full pipeline: OCR → AI → Fraud → Save to DB
-# # - Status system: approved / pending_verification / rejected
-# # - PDF and multiple image format support
-# # - Filtering by vendor, category, date, amount, GSTIN, status
-# # - Approve and reject endpoints for pending expenses
-# # - Authentication on all routes
 
+# #expense_router.py
 # from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 # from sqlalchemy.orm import Session
 # from database import get_db
@@ -23,96 +15,124 @@
 # )
 
 
-# @router.post("/scan-receipt")
-# async def scan_receipt(
-#     file: UploadFile = File(...),
-#     db: Session = Depends(get_db),
-#     current_user=Depends(get_current_user)
-# ):
-#     """
-#     Full pipeline:
-#     1. Receive image or PDF upload
-#     2. Validate file - reject if blank/empty/invalid
-#     3. Run OCR to extract text
-#     4. Run AI to extract structured data including GSTIN
-#     5. Run AI to classify expense
-#     6. Run fraud detection
-#     7. Set status: approved or pending_verification
-#     8. Save to database
-#     9. Return complete result
-#     """
+# # ─────────────────────────────────────────────────────────
+# # HELPER FUNCTION
+# # ─────────────────────────────────────────────────────────
 
-#     # Step 1 — Define supported file types
+# def build_expense_object(
+#     user_id: int,
+#     expense_status: str,
+#     extracted_data: dict,
+#     classification: dict,
+#     fraud_result: dict,
+#     ocr_result: dict
+# ) -> Expense:
+#     """
+#     Creates an Expense database object from pipeline results.
+#     Used by both single and bulk upload routes.
+#     """
+#     return Expense(
+#         user_id=user_id,
+#         status=expense_status,
+
+#         # Vendor Information
+#         vendor_name=extracted_data.get("vendor_name"),
+#         vendor_category=extracted_data.get("vendor_category_hint"),
+
+#         # Financial Data
+#         total_amount=extracted_data.get("total_amount"),
+#         subtotal=extracted_data.get("subtotal"),
+#         tax_amount=extracted_data.get("tax_amount"),
+#         tax_type=extracted_data.get("tax_type"),
+#         currency_code=extracted_data.get("currency_code", "INR"),
+
+#         # Payment Information
+#         payment_method=extracted_data.get("payment_method"),
+
+#         # AI Classification
+#         primary_category=classification.get("primary_category"),
+#         subcategory=classification.get("subcategory"),
+#         classification_confidence=classification.get("classification_confidence"),
+
+#         # Fraud Detection Results
+#         fraud_risk_score=fraud_result["fraud_risk_score"],
+#         is_duplicate=fraud_result["is_duplicate"],
+#         requires_manual_review=fraud_result["requires_manual_review"],
+#         fraud_flags=fraud_result["fraud_flags"],
+
+#         # OCR Metadata
+#         raw_ocr_text=ocr_result["cleaned_text"],
+#         confidence_score=ocr_result["confidence_score"],
+
+#         # Receipt Information
+#         receipt_number=extracted_data.get("receipt_number"),
+#         extracted_data=extracted_data,
+#         transaction_date=extracted_data.get("transaction_date")
+#     )
+
+
+# def run_full_pipeline(
+#     file_bytes: bytes,
+#     content_type: str,
+#     user_id: int,
+#     db: Session
+# ) -> dict:
+#     """
+#     Runs the complete AI pipeline on a single file.
+#     Used by both single and bulk upload routes.
+#     Returns a result dictionary.
+#     """
 #     image_types = [
-#         "image/jpeg",
-#         "image/png",
-#         "image/jpg",
-#         "image/webp",
-#         "image/tiff",
-#         "image/bmp"
+#         "image/jpeg", "image/png", "image/jpg",
+#         "image/webp", "image/tiff", "image/bmp"
 #     ]
 #     pdf_types = ["application/pdf"]
-#     allowed_types = image_types + pdf_types
 
-#     # Validate file type
-#     if file.content_type not in allowed_types:
-#         raise HTTPException(
-#             status_code=400,
-#             detail=f"File type {file.content_type} not supported. Supported: JPG, PNG, WEBP, TIFF, BMP, PDF"
-#         )
-
-#     # Step 2 — Read file bytes
-#     file_bytes = await file.read()
-
-#     # Step 3 — Validate file BEFORE OCR
-#     # This prevents wasting OCR resources on blank or invalid files
-#     # Invalid files are rejected immediately without any processing
-#     validation = validate_image_file(file_bytes, file.content_type)
-
+#     # Stage 1 — File Validation
+#     validation = validate_image_file(file_bytes, content_type)
 #     if not validation["is_valid"]:
-#         raise HTTPException(
-#             status_code=400,
-#             detail=validation["reason"]
-#         )
+#         return {"success": False, "error": validation["reason"]}
 
-#     # Step 4 — Run OCR based on file type
-#     # PDF files go through pdf2image + poppler first
-#     # Image files go directly to Tesseract
-#     if file.content_type in pdf_types:
+#     # Stage 2 — OCR
+#     if content_type in pdf_types:
 #         ocr_result = extract_text_from_pdf(file_bytes)
 #     else:
 #         ocr_result = extract_text_from_image(file_bytes)
 
-#     # Check if OCR returned an error
 #     if ocr_result.get("error"):
-#         raise HTTPException(
-#             status_code=422,
-#             detail=f"OCR failed: {ocr_result['error']}"
-#         )
+#         return {"success": False, "error": f"OCR failed: {ocr_result['error']}"}
 
-#     # Check if OCR extracted enough text
-#     # If less than 3 words extracted, the image is likely blank or unreadable
 #     if ocr_result["word_count"] < 3:
-#         raise HTTPException(
-#             status_code=422,
-#             detail="Could not extract enough text from file. Please upload a clearer image or PDF."
-#         )
+#         return {
+#             "success": False,
+#             "error": "Could not extract enough text. Please upload a clearer image."
+#         }
 
-#     # Step 5 — Run AI extraction
-#     # Sends cleaned OCR text to Groq LLaMA
-#     # Returns structured JSON with vendor, amount, date, GSTIN etc.
+#     # Stage 3 — AI Extraction
 #     ai_result = extract_expense_data(ocr_result["cleaned_text"])
 
 #     if ai_result["status"] == "error":
-#         raise HTTPException(
-#             status_code=500,
-#             detail=f"AI extraction failed: {ai_result['error']}"
-#         )
+#         return {"success": False, "error": f"AI extraction failed: {ai_result['error']}"}
 
 #     extracted_data = ai_result["data"]
 
-#     # Step 6 — Run AI classification
-#     # Assigns primary category and subcategory
+#     # Stage 4 — Receipt Validity Check
+#     total_amount = extracted_data.get("total_amount")
+#     vendor_name = extracted_data.get("vendor_name")
+
+#     if not total_amount and not vendor_name:
+#         return {
+#             "success": False,
+#             "error": "This file does not appear to be a receipt or bill. No financial data found."
+#         }
+
+#     if not total_amount:
+#         return {
+#             "success": False,
+#             "error": "Could not extract total amount. Please upload a clearer receipt."
+#         }
+
+#     # Stage 5 — AI Classification
 #     classification_result = classify_expense(
 #         vendor_name=extracted_data.get("vendor_name", "Unknown"),
 #         line_items=extracted_data.get("line_items", []),
@@ -120,59 +140,103 @@
 #     )
 #     classification = classification_result.get("data", {})
 
-#     # Step 7 — Run fraud detection
-#     # Checks 6 fraud rules and assigns risk score 0.0 to 1.0
+#     # Stage 6 — Fraud Detection
 #     fraud_result = check_fraud(
 #         extracted_data=extracted_data,
 #         classification=classification,
 #         ocr_confidence=ocr_result["confidence_score"],
-#         user_id=current_user.id,
+#         user_id=user_id,
 #         db=db
 #     )
 
-#     # Step 8 — Determine expense status based on fraud risk
-#     # fraud_risk_score >= 0.5 → pending_verification (needs review)
-#     # fraud_risk_score < 0.5 → approved (clean bill)
-#     # This implements the mentor's recommended flow:
-#     # Valid + Clean → Approved → Added to expenses
-#     # Valid + Suspicious → Pending Verification → Await approval
+#     # Stage 7 — Determine Expense Status
 #     if fraud_result["fraud_risk_score"] >= 0.5 or fraud_result["requires_manual_review"]:
 #         expense_status = "pending_verification"
 #     else:
 #         expense_status = "approved"
 
-#     # Step 9 — Save everything to database
-#     new_expense = Expense(
+#     return {
+#         "success": True,
+#         "extracted_data": extracted_data,
+#         "classification": classification,
+#         "fraud_result": fraud_result,
+#         "ocr_result": ocr_result,
+#         "expense_status": expense_status
+#     }
+
+
+# # ─────────────────────────────────────────────────────────
+# # SINGLE RECEIPT SCAN
+# # ─────────────────────────────────────────────────────────
+
+# @router.post("/scan-receipt")
+# async def scan_receipt(
+#     file: UploadFile = File(...),
+#     db: Session = Depends(get_db),
+#     current_user=Depends(get_current_user)
+# ):
+#     """
+#     Scans a single receipt image or PDF.
+
+#     Flow:
+#     1. Validate file — reject blank/empty/invalid files
+#     2. OCR — extract raw text
+#     3. AI extraction — extract vendor, amount, date, GSTIN etc.
+#     4. Receipt validity check — reject non-receipt files
+#     5. AI classification — assign expense category
+#     6. Fraud detection — check 6 fraud rules
+#     7. Set status: approved or pending_verification
+#     8. Save to database
+#     """
+
+#     allowed_types = [
+#         "image/jpeg", "image/png", "image/jpg",
+#         "image/webp", "image/tiff", "image/bmp",
+#         "application/pdf"
+#     ]
+
+#     if file.content_type not in allowed_types:
+#         raise HTTPException(
+#             status_code=400,
+#             detail=f"File type not supported. Please upload JPG, PNG, WEBP, TIFF, BMP, or PDF."
+#         )
+
+#     file_bytes = await file.read()
+
+#     # Run full pipeline
+#     pipeline_result = run_full_pipeline(
+#         file_bytes=file_bytes,
+#         content_type=file.content_type,
 #         user_id=current_user.id,
-#         status=expense_status,
-#         vendor_name=extracted_data.get("vendor_name"),
-#         vendor_category=extracted_data.get("vendor_category_hint"),
-#         total_amount=extracted_data.get("total_amount"),
-#         subtotal=extracted_data.get("subtotal"),
-#         tax_amount=extracted_data.get("tax_amount"),
-#         tax_type=extracted_data.get("tax_type"),
-#         currency_code=extracted_data.get("currency_code", "INR"),
-#         payment_method=extracted_data.get("payment_method"),
-#         primary_category=classification.get("primary_category"),
-#         subcategory=classification.get("subcategory"),
-#         classification_confidence=classification.get("classification_confidence"),
-#         fraud_risk_score=fraud_result["fraud_risk_score"],
-#         is_duplicate=fraud_result["is_duplicate"],
-#         requires_manual_review=fraud_result["requires_manual_review"],
-#         fraud_flags=fraud_result["fraud_flags"],
-#         raw_ocr_text=ocr_result["cleaned_text"],
-#         confidence_score=ocr_result["confidence_score"],
-#         receipt_number=extracted_data.get("receipt_number"),
-#         extracted_data=extracted_data,
-#         transaction_date=extracted_data.get("transaction_date")
+#         db=db
 #     )
 
-#     # Add to database session and commit
+#     if not pipeline_result["success"]:
+#         raise HTTPException(
+#             status_code=422,
+#             detail=pipeline_result["error"]
+#         )
+
+#     extracted_data = pipeline_result["extracted_data"]
+#     classification = pipeline_result["classification"]
+#     fraud_result = pipeline_result["fraud_result"]
+#     ocr_result = pipeline_result["ocr_result"]
+#     expense_status = pipeline_result["expense_status"]
+
+#     # Save to database
+#     new_expense = build_expense_object(
+#         user_id=current_user.id,
+#         expense_status=expense_status,
+#         extracted_data=extracted_data,
+#         classification=classification,
+#         fraud_result=fraud_result,
+#         ocr_result=ocr_result
+#     )
+
 #     db.add(new_expense)
 #     db.commit()
 #     db.refresh(new_expense)
 
-#     # Step 10 — Return complete result
 #     return {
 #         "status": "success",
 #         "expense_id": new_expense.id,
@@ -191,10 +255,139 @@
 #         "message": (
 #             "Receipt scanned and approved successfully"
 #             if expense_status == "approved"
-#             else "Receipt flagged for verification. An admin needs to review this expense."
+#             else "Receipt flagged for verification. Please review in the Pending Verification tab."
 #         )
 #     }
 
+
+# # ─────────────────────────────────────────────────────────
+# # BULK RECEIPT SCAN
+# # ─────────────────────────────────────────────────────────
+
+# @router.post("/scan-bulk")
+# async def scan_bulk_receipts(
+#     files: list[UploadFile] = File(...),
+#     db: Session = Depends(get_db),
+#     current_user=Depends(get_current_user)
+# ):
+#     """
+#     Scans multiple receipts at once (maximum 10 files).
+
+#     Each file goes through the full pipeline independently.
+#     Returns a summary showing how many were approved,
+#     pending verification, or failed.
+#     """
+
+#     if len(files) > 10:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Maximum 10 files allowed per bulk upload. Please split into smaller batches."
+#         )
+
+#     allowed_types = [
+#         "image/jpeg", "image/png", "image/jpg",
+#         "image/webp", "image/tiff", "image/bmp",
+#         "application/pdf"
+#     ]
+
+#     results = []
+#     successful = 0
+#     failed = 0
+#     pending = 0
+
+#     for file in files:
+#         file_result = {
+#             "filename": file.filename,
+#             "status": None,
+#             "expense_id": None,
+#             "expense_status": None,
+#             "error": None,
+#             "vendor_name": None,
+#             "total_amount": None,
+#             "category": None,
+#             "fraud_risk_score": None
+#         }
+
+#         try:
+#             # Check file type
+#             if file.content_type not in allowed_types:
+#                 file_result["status"] = "failed"
+#                 file_result["error"] = f"Unsupported file type: {file.content_type}"
+#                 failed += 1
+#                 results.append(file_result)
+#                 continue
+
+#             file_bytes = await file.read()
+
+#             # Run full pipeline
+#             pipeline_result = run_full_pipeline(
+#                 file_bytes=file_bytes,
+#                 content_type=file.content_type,
+#                 user_id=current_user.id,
+#                 db=db
+#             )
+
+#             if not pipeline_result["success"]:
+#                 file_result["status"] = "failed"
+#                 file_result["error"] = pipeline_result["error"]
+#                 failed += 1
+#                 results.append(file_result)
+#                 continue
+
+#             extracted_data = pipeline_result["extracted_data"]
+#             classification = pipeline_result["classification"]
+#             fraud_result = pipeline_result["fraud_result"]
+#             ocr_result = pipeline_result["ocr_result"]
+#             expense_status = pipeline_result["expense_status"]
+
+#             # Save to database
+#             new_expense = build_expense_object(
+#                 user_id=current_user.id,
+#                 expense_status=expense_status,
+#                 extracted_data=extracted_data,
+#                 classification=classification,
+#                 fraud_result=fraud_result,
+#                 ocr_result=ocr_result
+#             )
+
+#             db.add(new_expense)
+#             db.commit()
+#             db.refresh(new_expense)
+
+#             # Track counts
+#             if expense_status == "approved":
+#                 successful += 1
+#             else:
+#                 pending += 1
+
+#             file_result["status"] = "success"
+#             file_result["expense_id"] = new_expense.id
+#             file_result["expense_status"] = expense_status
+#             file_result["vendor_name"] = extracted_data.get("vendor_name")
+#             file_result["total_amount"] = extracted_data.get("total_amount")
+#             file_result["category"] = classification.get("primary_category")
+#             file_result["fraud_risk_score"] = fraud_result["fraud_risk_score"]
+
+#         except Exception as e:
+#             file_result["status"] = "failed"
+#             file_result["error"] = str(e)
+#             failed += 1
+
+#         results.append(file_result)
+
+#     return {
+#         "status": "success",
+#         "total_files": len(files),
+#         "successful": successful,
+#         "pending_verification": pending,
+#         "failed": failed,
+#         "results": results
+#     }
+
+
+# # ─────────────────────────────────────────────────────────
+# # GET PENDING VERIFICATION EXPENSES
+# # ─────────────────────────────────────────────────────────
 
 # @router.get("/pending")
 # def get_pending_expenses(
@@ -204,7 +397,7 @@
 #     """
 #     Returns all expenses with status = pending_verification.
 #     These are suspicious bills awaiting admin review.
-#     They are NOT included in expense totals.
+#     They are NOT included in expense totals or dashboard.
 #     """
 #     expenses = db.query(Expense).filter(
 #         Expense.user_id == current_user.id,
@@ -232,6 +425,10 @@
 #     }
 
 
+# # ─────────────────────────────────────────────────────────
+# # DASHBOARD SUMMARY
+# # ─────────────────────────────────────────────────────────
+
 # @router.get("/summary")
 # def get_expense_summary(
 #     db: Session = Depends(get_db),
@@ -240,22 +437,19 @@
 #     """
 #     Returns dashboard metrics.
 #     ONLY counts approved expenses in totals.
-#     Pending and rejected expenses are excluded.
+#     Pending and rejected expenses are excluded from all calculations.
 #     """
 
-#     # Only approved expenses count in totals
 #     approved_expenses = db.query(Expense).filter(
 #         Expense.user_id == current_user.id,
 #         Expense.status == "approved"
 #     ).all()
 
-#     # Count pending separately for the dashboard alert
 #     pending_count = db.query(Expense).filter(
 #         Expense.user_id == current_user.id,
 #         Expense.status == "pending_verification"
 #     ).count()
 
-#     # Count rejected separately
 #     rejected_count = db.query(Expense).filter(
 #         Expense.user_id == current_user.id,
 #         Expense.status == "rejected"
@@ -273,13 +467,12 @@
 #             "payment_method_breakdown": {}
 #         }
 
-#     # Calculate totals from approved only
 #     total_spend = sum(
 #         e.total_amount for e in approved_expenses if e.total_amount
 #     )
 #     avg_transaction = total_spend / len(approved_expenses)
 
-#     # Category breakdown from approved only
+#     # Spend by category — approved only
 #     category_breakdown = {}
 #     for e in approved_expenses:
 #         if e.primary_category and e.total_amount:
@@ -288,7 +481,7 @@
 #                 category_breakdown.get(cat, 0) + e.total_amount
 #             )
 
-#     # Payment method breakdown from approved only
+#     # Payment method distribution — approved only
 #     payment_breakdown = {}
 #     for e in approved_expenses:
 #         if e.payment_method:
@@ -307,6 +500,10 @@
 #     }
 
 
+# # ─────────────────────────────────────────────────────────
+# # LIST ALL EXPENSES WITH FILTERS
+# # ─────────────────────────────────────────────────────────
+
 # @router.get("/")
 # def get_all_expenses(
 #     db: Session = Depends(get_db),
@@ -323,24 +520,28 @@
 # ):
 #     """
 #     Returns expenses for the logged in user.
-#     By default only returns APPROVED expenses.
+#     Default: only approved expenses shown.
 #     Pass status=pending_verification or status=rejected to see others.
-#     Supports filtering by multiple criteria.
+
+#     Filter options:
+#     - vendor_name: partial match search
+#     - category: Food & Dining, Travel & Transport, etc.
+#     - start_date / end_date: YYYY-MM-DD format
+#     - min_amount / max_amount: numeric
+#     - gstin: GST number
+#     - status: approved / pending_verification / rejected
 #     """
 
-#     # Base query — only this user's expenses
 #     query = db.query(Expense).filter(
 #         Expense.user_id == current_user.id
 #     )
 
-#     # Filter by status
-#     # Default = approved only (pending and rejected excluded)
+#     # Default to approved only
 #     if status:
 #         query = query.filter(Expense.status == status)
 #     else:
 #         query = query.filter(Expense.status == "approved")
 
-#     # Apply optional filters
 #     if vendor_name:
 #         query = query.filter(
 #             Expense.vendor_name.ilike(f"%{vendor_name}%")
@@ -368,11 +569,9 @@
 #             Expense.requires_manual_review == requires_review
 #         )
 
-#     # Most recent first
 #     query = query.order_by(Expense.created_at.desc())
 #     expenses = query.all()
 
-#     # Summary stats
 #     total_spend = sum(e.total_amount for e in expenses if e.total_amount)
 #     flagged_count = sum(1 for e in expenses if e.requires_manual_review)
 
@@ -414,6 +613,10 @@
 #     }
 
 
+# # ─────────────────────────────────────────────────────────
+# # APPROVE A PENDING EXPENSE
+# # ─────────────────────────────────────────────────────────
+
 # @router.put("/{expense_id}/approve")
 # def approve_expense(
 #     expense_id: int,
@@ -422,8 +625,8 @@
 # ):
 #     """
 #     Approves a pending expense.
-#     Moves it from pending_verification to approved.
-#     It will now appear in expense totals and history.
+#     Moves it from Pending Verification to Approved.
+#     It will now appear in expense totals and dashboard.
 #     """
 #     expense = db.query(Expense).filter(
 #         Expense.id == expense_id,
@@ -448,11 +651,15 @@
 
 #     return {
 #         "status": "success",
-#         "message": f"Expense {expense_id} approved and added to expenses",
+#         "message": f"Expense {expense_id} approved and added to your expense list",
 #         "expense_id": expense_id,
 #         "new_status": "approved"
 #     }
 
+
+# # ─────────────────────────────────────────────────────────
+# # REJECT A PENDING EXPENSE
+# # ─────────────────────────────────────────────────────────
 
 # @router.put("/{expense_id}/reject")
 # def reject_expense(
@@ -462,7 +669,7 @@
 # ):
 #     """
 #     Rejects a pending expense.
-#     Moves it to rejected status.
+#     Moves it to Rejected status.
 #     It will be archived and excluded from all expense calculations.
 #     """
 #     expense = db.query(Expense).filter(
@@ -494,6 +701,10 @@
 #     }
 
 
+# # ─────────────────────────────────────────────────────────
+# # GET SINGLE EXPENSE BY ID
+# # ─────────────────────────────────────────────────────────
+
 # @router.get("/{expense_id}")
 # def get_expense_by_id(
 #     expense_id: int,
@@ -501,7 +712,7 @@
 #     current_user=Depends(get_current_user)
 # ):
 #     """
-#     Returns a single expense by its ID.
+#     Returns full details of a single expense by ID.
 #     Only returns the expense if it belongs to the current user.
 #     """
 #     expense = db.query(Expense).filter(
@@ -543,6 +754,10 @@
 #     }
 
 
+# # ─────────────────────────────────────────────────────────
+# # DELETE AN EXPENSE
+# # ─────────────────────────────────────────────────────────
+
 # @router.delete("/{expense_id}")
 # def delete_expense(
 #     expense_id: int,
@@ -551,7 +766,7 @@
 # ):
 #     """
 #     Permanently deletes an expense.
-#     Only allowed if the expense belongs to current user.
+#     Only allowed if the expense belongs to the current user.
 #     """
 #     expense = db.query(Expense).filter(
 #         Expense.id == expense_id,
@@ -572,20 +787,17 @@
 #         "message": f"Expense {expense_id} deleted successfully"
 #     }
 
-
+# expense_router.py
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from services.ocr_service import extract_text_from_image, extract_text_from_pdf, validate_image_file
+from services.ocr_service import extract_text_from_image, extract_text_from_pdf
 from services.ai_service import extract_expense_data, classify_expense
 from services.fraud_service import check_fraud
 from models.expense import Expense
-from routers.auth_router import get_current_user
+from dependencies import get_current_user
 
-router = APIRouter(
-    prefix="/expenses",
-    tags=["Expenses"]
-)
+router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 
 @router.post("/scan-receipt")
@@ -594,79 +806,36 @@ async def scan_receipt(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    image_types = [
-        "image/jpeg", "image/png", "image/jpg",
-        "image/webp", "image/tiff", "image/bmp"
-    ]
+    image_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "image/tiff", "image/bmp"]
     pdf_types = ["application/pdf"]
     allowed_types = image_types + pdf_types
 
     if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {file.content_type} not supported. Supported: JPG, PNG, WEBP, TIFF, BMP, PDF"
-        )
+        raise HTTPException(status_code=400, detail=f"File type {file.content_type} not supported.")
 
     file_bytes = await file.read()
 
-    # Validate file before OCR
-    # Rejects blank, empty, or invalid files
-    # These are never saved to database
-    validation = validate_image_file(file_bytes, file.content_type)
-    if not validation["is_valid"]:
-        raise HTTPException(
-            status_code=400,
-            detail=validation["reason"]
-        )
-
-    # Run OCR
     if file.content_type in pdf_types:
         ocr_result = extract_text_from_pdf(file_bytes)
     else:
         ocr_result = extract_text_from_image(file_bytes)
 
     if ocr_result.get("error"):
-        raise HTTPException(
-            status_code=422,
-            detail=f"OCR failed: {ocr_result['error']}"
-        )
+        raise HTTPException(status_code=422, detail=f"OCR failed: {ocr_result['error']}")
 
     if ocr_result["word_count"] < 3:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not extract enough text. Please upload a clearer image or PDF."
-        )
+        raise HTTPException(status_code=422, detail="Could not extract enough text. Please upload a clearer image or PDF.")
 
-    # Run AI extraction
     ai_result = extract_expense_data(ocr_result["cleaned_text"])
-
     if ai_result["status"] == "error":
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI extraction failed: {ai_result['error']}"
-        )
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {ai_result['error']}")
 
     extracted_data = ai_result["data"]
 
     # Validate this is actually a receipt
-    # If AI cannot find total_amount AND vendor_name,
-    # this is not a receipt - reject without saving to DB
-    total_amount = extracted_data.get("total_amount")
-    vendor_name = extracted_data.get("vendor_name")
+    if not extracted_data.get("total_amount") and not extracted_data.get("vendor_name"):
+        raise HTTPException(status_code=422, detail="This file does not appear to be a receipt or bill. No financial data found.")
 
-    if not total_amount and not vendor_name:
-        raise HTTPException(
-            status_code=422,
-            detail="This file does not appear to be a receipt or bill. No financial data found. Please upload a valid receipt."
-        )
-
-    if not total_amount:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not extract total amount from this file. Please upload a clearer receipt."
-        )
-
-    # Run AI classification
     classification_result = classify_expense(
         vendor_name=extracted_data.get("vendor_name", "Unknown"),
         line_items=extracted_data.get("line_items", []),
@@ -674,7 +843,6 @@ async def scan_receipt(
     )
     classification = classification_result.get("data", {})
 
-    # Run fraud detection
     fraud_result = check_fraud(
         extracted_data=extracted_data,
         classification=classification,
@@ -683,18 +851,8 @@ async def scan_receipt(
         db=db
     )
 
-    # Determine expense status
-    # fraud_risk >= 0.5 → pending_verification (needs admin review)
-    # fraud_risk < 0.5 → approved (added to expenses immediately)
-    if fraud_result["fraud_risk_score"] >= 0.5 or fraud_result["requires_manual_review"]:
-        expense_status = "pending_verification"
-    else:
-        expense_status = "approved"
-
-    # Save to database
     new_expense = Expense(
         user_id=current_user.id,
-        status=expense_status,
         vendor_name=extracted_data.get("vendor_name"),
         vendor_category=extracted_data.get("vendor_category_hint"),
         total_amount=extracted_data.get("total_amount"),
@@ -724,7 +882,6 @@ async def scan_receipt(
     return {
         "status": "success",
         "expense_id": new_expense.id,
-        "expense_status": expense_status,
         "filename": file.filename,
         "file_type": file.content_type,
         "ocr": {
@@ -735,43 +892,7 @@ async def scan_receipt(
         },
         "extracted_data": extracted_data,
         "classification": classification,
-        "fraud_analysis": fraud_result,
-        "message": (
-            "Receipt scanned and approved successfully"
-            if expense_status == "approved"
-            else "Receipt flagged for verification. Please review in the Pending tab."
-        )
-    }
-
-
-@router.get("/pending")
-def get_pending_expenses(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
-):
-    expenses = db.query(Expense).filter(
-        Expense.user_id == current_user.id,
-        Expense.status == "pending_verification"
-    ).order_by(Expense.created_at.desc()).all()
-
-    return {
-        "status": "success",
-        "count": len(expenses),
-        "expenses": [
-            {
-                "id": e.id,
-                "vendor_name": e.vendor_name,
-                "total_amount": e.total_amount,
-                "primary_category": e.primary_category,
-                "transaction_date": e.transaction_date,
-                "fraud_risk_score": e.fraud_risk_score,
-                "fraud_flags": e.fraud_flags,
-                "confidence_score": e.confidence_score,
-                "status": e.status,
-                "created_at": str(e.created_at)
-            }
-            for e in expenses
-        ]
+        "fraud_analysis": fraud_result
     }
 
 
@@ -780,59 +901,38 @@ def get_expense_summary(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    # Only approved expenses count in totals
-    approved_expenses = db.query(Expense).filter(
-        Expense.user_id == current_user.id,
-        Expense.status == "approved"
-    ).all()
+    expenses = db.query(Expense).filter(Expense.user_id == current_user.id).all()
 
-    pending_count = db.query(Expense).filter(
-        Expense.user_id == current_user.id,
-        Expense.status == "pending_verification"
-    ).count()
-
-    rejected_count = db.query(Expense).filter(
-        Expense.user_id == current_user.id,
-        Expense.status == "rejected"
-    ).count()
-
-    if not approved_expenses:
+    if not expenses:
         return {
             "status": "success",
             "total_spend": 0,
             "transaction_count": 0,
-            "pending_count": pending_count,
-            "rejected_count": rejected_count,
+            "flagged_count": 0,
             "avg_transaction": 0,
             "category_breakdown": {},
             "payment_method_breakdown": {}
         }
 
-    total_spend = sum(
-        e.total_amount for e in approved_expenses if e.total_amount
-    )
-    avg_transaction = total_spend / len(approved_expenses)
+    total_spend = sum(e.total_amount for e in expenses if e.total_amount)
+    flagged_count = sum(1 for e in expenses if e.requires_manual_review)
+    avg_transaction = total_spend / len(expenses) if expenses else 0
 
     category_breakdown = {}
-    for e in approved_expenses:
+    for e in expenses:
         if e.primary_category and e.total_amount:
-            cat = e.primary_category
-            category_breakdown[cat] = (
-                category_breakdown.get(cat, 0) + e.total_amount
-            )
+            category_breakdown[e.primary_category] = category_breakdown.get(e.primary_category, 0) + e.total_amount
 
     payment_breakdown = {}
-    for e in approved_expenses:
+    for e in expenses:
         if e.payment_method:
-            method = e.payment_method
-            payment_breakdown[method] = payment_breakdown.get(method, 0) + 1
+            payment_breakdown[e.payment_method] = payment_breakdown.get(e.payment_method, 0) + 1
 
     return {
         "status": "success",
         "total_spend": round(total_spend, 2),
-        "transaction_count": len(approved_expenses),
-        "pending_count": pending_count,
-        "rejected_count": rejected_count,
+        "transaction_count": len(expenses),
+        "flagged_count": flagged_count,
         "avg_transaction": round(avg_transaction, 2),
         "category_breakdown": category_breakdown,
         "payment_method_breakdown": payment_breakdown
@@ -850,44 +950,24 @@ def get_all_expenses(
     min_amount: float = None,
     max_amount: float = None,
     gstin: str = None,
-    requires_review: bool = None,
-    status: str = None
+    requires_review: bool = None
 ):
-    query = db.query(Expense).filter(
-        Expense.user_id == current_user.id
-    )
-
-    if status:
-        query = query.filter(Expense.status == status)
-    else:
-        query = query.filter(Expense.status == "approved")
+    query = db.query(Expense).filter(Expense.user_id == current_user.id)
 
     if vendor_name:
-        query = query.filter(
-            Expense.vendor_name.ilike(f"%{vendor_name}%")
-        )
-
+        query = query.filter(Expense.vendor_name.ilike(f"%{vendor_name}%"))
     if category:
-        query = query.filter(
-            Expense.primary_category.ilike(f"%{category}%")
-        )
-
+        query = query.filter(Expense.primary_category.ilike(f"%{category}%"))
     if start_date:
         query = query.filter(Expense.transaction_date >= start_date)
-
     if end_date:
         query = query.filter(Expense.transaction_date <= end_date)
-
     if min_amount:
         query = query.filter(Expense.total_amount >= min_amount)
-
     if max_amount:
         query = query.filter(Expense.total_amount <= max_amount)
-
     if requires_review is not None:
-        query = query.filter(
-            Expense.requires_manual_review == requires_review
-        )
+        query = query.filter(Expense.requires_manual_review == requires_review)
 
     query = query.order_by(Expense.created_at.desc())
     expenses = query.all()
@@ -908,8 +988,7 @@ def get_all_expenses(
             "min_amount": min_amount,
             "max_amount": max_amount,
             "gstin": gstin,
-            "requires_review": requires_review,
-            "status": status or "approved"
+            "requires_review": requires_review
         },
         "expenses": [
             {
@@ -925,81 +1004,10 @@ def get_all_expenses(
                 "requires_manual_review": e.requires_manual_review,
                 "confidence_score": e.confidence_score,
                 "receipt_number": e.receipt_number,
-                "status": e.status,
                 "created_at": str(e.created_at)
             }
             for e in expenses
         ]
-    }
-
-
-@router.put("/{expense_id}/approve")
-def approve_expense(
-    expense_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
-):
-    expense = db.query(Expense).filter(
-        Expense.id == expense_id,
-        Expense.user_id == current_user.id
-    ).first()
-
-    if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Expense {expense_id} not found"
-        )
-
-    if expense.status == "approved":
-        raise HTTPException(
-            status_code=400,
-            detail="Expense is already approved"
-        )
-
-    expense.status = "approved"
-    db.commit()
-    db.refresh(expense)
-
-    return {
-        "status": "success",
-        "message": f"Expense {expense_id} approved and added to expenses",
-        "expense_id": expense_id,
-        "new_status": "approved"
-    }
-
-
-@router.put("/{expense_id}/reject")
-def reject_expense(
-    expense_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
-):
-    expense = db.query(Expense).filter(
-        Expense.id == expense_id,
-        Expense.user_id == current_user.id
-    ).first()
-
-    if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Expense {expense_id} not found"
-        )
-
-    if expense.status == "rejected":
-        raise HTTPException(
-            status_code=400,
-            detail="Expense is already rejected"
-        )
-
-    expense.status = "rejected"
-    db.commit()
-    db.refresh(expense)
-
-    return {
-        "status": "success",
-        "message": f"Expense {expense_id} rejected and archived",
-        "expense_id": expense_id,
-        "new_status": "rejected"
     }
 
 
@@ -1015,10 +1023,7 @@ def get_expense_by_id(
     ).first()
 
     if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Expense with id {expense_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Expense {expense_id} not found")
 
     return {
         "status": "success",
@@ -1042,7 +1047,6 @@ def get_expense_by_id(
             "requires_manual_review": expense.requires_manual_review,
             "confidence_score": expense.confidence_score,
             "extracted_data": expense.extracted_data,
-            "status": expense.status,
             "created_at": str(expense.created_at)
         }
     }
@@ -1060,15 +1064,9 @@ def delete_expense(
     ).first()
 
     if not expense:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Expense with id {expense_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Expense {expense_id} not found")
 
     db.delete(expense)
     db.commit()
 
-    return {
-        "status": "success",
-        "message": f"Expense {expense_id} deleted successfully"
-    }
+    return {"status": "success", "message": f"Expense {expense_id} deleted successfully"}

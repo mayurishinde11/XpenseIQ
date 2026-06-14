@@ -134,7 +134,8 @@ def login(
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "email": user.email
+        "email": user.email,
+        "full_name": user.full_name  # ← add this line
     }
 
 

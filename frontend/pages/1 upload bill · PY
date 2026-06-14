@@ -1,0 +1,300 @@
+# pages/1_Upload_Bill.py
+# Supports multiple file uploads at once (PDF, JPG, PNG mixed)
+# Shows per-file success/error alerts
+
+import streamlit as st
+import requests
+import os
+import time
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+
+st.set_page_config(page_title="Upload Bill - XpenseIQ", page_icon="📷", layout="wide")
+
+if "token" not in st.session_state or not st.session_state.token:
+    st.warning("Please login first!")
+    st.switch_page("app.py")
+
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stApp { background: linear-gradient(135deg, #0F0F1A 0%, #1A1A2E 100%); }
+    [data-testid="stSidebar"] { background: rgba(26, 26, 46, 0.95) !important; border-right: 1px solid rgba(108, 99, 255, 0.2) !important; }
+    .stButton > button { background: linear-gradient(90deg, #6C63FF, #A78BFA) !important; color: white !important; border: none !important; border-radius: 10px !important; font-weight: 600 !important; }
+    .stButton > button:hover { transform: translateY(-2px) !important; box-shadow: 0 5px 20px rgba(108, 99, 255, 0.4) !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+def get_headers():
+    return {"Authorization": f"Bearer {st.session_state.token}"}
+
+
+def get_file_icon(file_type):
+    if "pdf" in file_type:
+        return "📄"
+    elif "png" in file_type:
+        return "🖼️"
+    elif "jpeg" in file_type or "jpg" in file_type:
+        return "📸"
+    else:
+        return "📎"
+
+
+def scan_single_file(uploaded_file):
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/expenses/scan-receipt",
+            headers=get_headers(),
+            files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)},
+            timeout=60
+        )
+        if response.status_code == 200:
+            return {"status": "success", "data": response.json()}
+        else:
+            try:
+                error = response.json().get("detail", "Scan failed")
+            except:
+                error = f"Server error: {response.status_code}"
+            return {"status": "error", "error": error}
+    except requests.exceptions.Timeout:
+        return {"status": "error", "error": "Request timed out. Please try again."}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# Sidebar
+with st.sidebar:
+    st.markdown("## 💰 XpenseIQ")
+    st.divider()
+    name = st.session_state.get("full_name") or st.session_state.get("email", "").split("@")[0]
+    st.markdown(f"👤 **{name}**")
+    st.divider()
+    st.page_link("app.py", label="📊 Dashboard", use_container_width=True)
+    st.page_link("pages/1_Upload_Bill.py", label="📷 Upload Bill", use_container_width=True)
+    st.page_link("pages/2_My_Expenses.py", label="📋 My Expenses", use_container_width=True)
+    st.page_link("pages/3_Analytics.py", label="📈 Analytics", use_container_width=True)
+    st.page_link("pages/4_Reports.py", label="📄 Reports", use_container_width=True)
+    st.divider()
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.token = None
+        st.switch_page("app.py")
+
+# Main content
+st.markdown("# 📷 Upload Bills")
+st.markdown("Upload **multiple receipts** at once — mix JPG, PNG and PDF files together!")
+st.info("💡 **Tip:** Hold **Ctrl** (Windows) or **Cmd** (Mac) to select multiple files at once.")
+
+st.write("")
+
+col1, col2 = st.columns([1.5, 1])
+
+with col1:
+    uploaded_files = st.file_uploader(
+        "Choose receipt images or PDFs",
+        type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "pdf", "tif"],
+        accept_multiple_files=True,
+        help="Hold Ctrl/Cmd to select multiple files. Mix JPG, PNG and PDF freely."
+    )
+
+    if uploaded_files:
+        st.markdown(f"### 📎 {len(uploaded_files)} file(s) selected")
+
+        # Show preview of all selected files
+        for f in uploaded_files:
+            icon = get_file_icon(f.type)
+            size_kb = f.size / 1024
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                st.markdown(f"{icon} **{f.name}** — {size_kb:.1f} KB — `{f.type}`")
+            with col_b:
+                st.markdown("✅ Ready")
+
+        st.write("")
+
+        if st.button(f"🔍 Scan All {len(uploaded_files)} Receipt(s)", use_container_width=True):
+            st.session_state["scan_results"] = []
+            results = []
+
+            # Progress bar
+            progress_bar = st.progress(0)
+            status_placeholder = st.empty()
+
+            success_count = 0
+            error_count = 0
+
+            for i, file in enumerate(uploaded_files):
+                status_placeholder.markdown(f"⏳ Processing **{file.name}** ({i+1} of {len(uploaded_files)})...")
+
+                result = scan_single_file(file)
+                result["filename"] = file.name
+                result["filetype"] = file.type
+                results.append(result)
+
+                if result["status"] == "success":
+                    success_count += 1
+                else:
+                    error_count += 1
+
+                progress_bar.progress((i + 1) / len(uploaded_files))
+                time.sleep(0.2)
+
+            progress_bar.empty()
+            status_placeholder.empty()
+
+            st.session_state["scan_results"] = results
+
+            # Summary
+            col_s, col_e = st.columns(2)
+            with col_s:
+                if success_count > 0:
+                    st.success(f"✅ {success_count} receipt(s) scanned successfully!")
+            with col_e:
+                if error_count > 0:
+                    st.error(f"❌ {error_count} file(s) failed — see details below.")
+
+            st.rerun()
+
+with col2:
+    st.markdown("### 💡 How it works")
+    tips = [
+        ("📸", "Select Files", "Click Browse or drag & drop multiple files"),
+        ("🔢", "Mix Formats", "JPG, PNG, PDF all supported together"),
+        ("🤖", "AI Scans Each", "Every receipt processed individually"),
+        ("✅", "Success Alert", "Green card shows extracted data"),
+        ("❌", "Error Alert", "Red card shows what went wrong"),
+        ("💾", "Auto Saved", "Valid receipts saved automatically"),
+    ]
+    for icon, title, desc in tips:
+        st.markdown(f"""
+        <div style="display:flex; gap:10px; padding:8px; margin-bottom:6px; background:rgba(108,99,255,0.05); border-radius:8px;">
+            <span style="font-size:18px;">{icon}</span>
+            <div>
+                <div style="font-weight:600; font-size:13px;">{title}</div>
+                <div style="font-size:12px; color:#A0A0B0;">{desc}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# Show scan results
+if "scan_results" in st.session_state and st.session_state["scan_results"]:
+    st.divider()
+    st.markdown("## 📊 Scan Results")
+
+    for i, result in enumerate(st.session_state["scan_results"]):
+        filename = result.get("filename", "Unknown")
+        filetype = result.get("filetype", "")
+        icon = get_file_icon(filetype)
+
+        if result["status"] == "success":
+            data = result["data"]
+            extracted = data.get("extracted_data", {})
+            classification = data.get("classification", {})
+            fraud = data.get("fraud_analysis", {})
+            risk = fraud.get("fraud_risk_score", 0) or 0
+
+            if risk >= 0.5:
+                risk_color = "#EF4444"
+                risk_label = "HIGH ⚠️"
+                risk_bg = "rgba(239,68,68,0.08)"
+                risk_border = "rgba(239,68,68,0.3)"
+            elif risk >= 0.3:
+                risk_color = "#EAB308"
+                risk_label = "MEDIUM ⚡"
+                risk_bg = "rgba(234,179,8,0.08)"
+                risk_border = "rgba(234,179,8,0.3)"
+            else:
+                risk_color = "#22C55E"
+                risk_label = "LOW ✅"
+                risk_bg = "rgba(34,197,94,0.08)"
+                risk_border = "rgba(34,197,94,0.3)"
+
+            vendor = extracted.get("vendor_name") or "Unknown Vendor"
+            amount = extracted.get("total_amount") or 0
+            category = classification.get("primary_category") or "Uncategorized"
+            expense_id = data.get("expense_id", "N/A")
+
+            # Success card header
+            st.markdown(f"""
+            <div style="background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.3); border-radius:12px; padding:15px; margin-bottom:5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:24px;">{icon}</span>
+                        <div>
+                            <div style="font-weight:700; font-size:15px; color:#22C55E;">✅ {filename}</div>
+                            <div style="font-size:12px; color:#A0A0B0;">Expense #{expense_id} • {vendor} • {category}</div>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:20px; font-weight:800; color:#22C55E;">₹{amount:,.0f}</div>
+                        <div style="font-size:12px; color:{risk_color};">Risk: {risk_label}</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Expandable details
+            with st.expander(f"View details for {filename}"):
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.markdown("**🏪 Vendor Details**")
+                    st.write(f"Name: {extracted.get('vendor_name') or 'Unknown'}")
+                    st.write(f"Date: {extracted.get('transaction_date') or 'Unknown'}")
+                    st.write(f"Receipt No: {extracted.get('receipt_number') or 'N/A'}")
+                    st.write(f"Payment: {extracted.get('payment_method') or 'Unknown'}")
+                    if extracted.get('gstin'):
+                        st.write(f"GSTIN: {extracted.get('gstin')}")
+
+                with col2:
+                    st.markdown("**💰 Amount Details**")
+                    st.write(f"Total: ₹{extracted.get('total_amount') or 0}")
+                    st.write(f"Subtotal: ₹{extracted.get('subtotal') or 'N/A'}")
+                    st.write(f"Tax: ₹{extracted.get('tax_amount') or 'N/A'}")
+                    st.write(f"Currency: {extracted.get('currency_code') or 'INR'}")
+
+                with col3:
+                    st.markdown("**🏷️ Classification**")
+                    st.write(f"Category: {category}")
+                    st.write(f"Subcategory: {classification.get('subcategory') or 'N/A'}")
+                    ocr = data.get("ocr", {})
+                    st.write(f"OCR Confidence: {ocr.get('confidence_score', 0):.0%}")
+                    st.markdown(f"Fraud Risk: **<span style='color:{risk_color}'>{risk:.2f} — {risk_label}</span>**", unsafe_allow_html=True)
+
+                fraud_flags = fraud.get("fraud_flags", [])
+                if fraud_flags:
+                    st.warning("⚠️ Fraud Flags: " + " | ".join(fraud_flags))
+
+                line_items = extracted.get("line_items", [])
+                if line_items:
+                    import pandas as pd
+                    st.markdown("**📋 Line Items**")
+                    st.dataframe(pd.DataFrame(line_items), use_container_width=True)
+
+        else:
+            # Error card — shows exactly what went wrong
+            error_msg = result.get("error", "Unknown error")
+            st.markdown(f"""
+            <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:12px; padding:15px; margin-bottom:5px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:24px;">{icon}</span>
+                    <div>
+                        <div style="font-weight:700; font-size:15px; color:#EF4444;">❌ {filename} — Failed</div>
+                        <div style="font-size:13px; color:#FCA5A5; margin-top:4px;">⚠️ {error_msg}</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.write("")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ Clear Results", use_container_width=True):
+            st.session_state["scan_results"] = []
+            st.rerun()
+    with col2:
+        if st.button("📋 View All Expenses", use_container_width=True):
+            st.switch_page("pages/2_My_Expenses.py")
