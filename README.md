@@ -235,5 +235,5 @@ Every push to the main branch triggers GitHub Actions which:
 ## Author
 
 Mayuri Shinde
-- GitHub: https://github.com/Siddhi-3843
+- GitHub: https://github.com/mayurishinde11
 - Project: XpenseIQ — AI Expense Scanner
