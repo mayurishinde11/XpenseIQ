@@ -45,8 +45,7 @@ button[kind="secondary"]:hover {
 }
 </style>
 """
-st.markdown(CSS, unsafe_allow_html=True)
-
+st.html(CSS)
 
 
 DEFAULT_STATE = {
@@ -965,30 +964,37 @@ def show_scan_page():
 
 def show_expenses_page():
     import pandas as pd
-    st.title("My Expenses")
+
+    st.markdown(
+        "<h1 style='display:flex;align-items:center;gap:8px;margin-bottom:0;'>"
+        "My Expenses</h1>",
+        unsafe_allow_html=True
+    )
     st.caption("Showing approved expenses only.")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        vendor_filter = st.text_input("Search by vendor")
-    with col2:
-        category_filter = st.selectbox("Category", [
-            "", "Food & Dining", "Travel & Transport", "Health & Medical",
-            "Office & Supplies", "Utilities", "Entertainment",
-            "Shopping", "Education", "Finance", "Miscellaneous"
-        ])
-    with col3:
-        show_flagged = st.checkbox("Show only flagged")
+    with st.container(border=True):
+        col1, col2, col3 = st.columns([2, 2, 1.2])
+        with col1:
+            vendor_filter = st.text_input("Search by vendor", placeholder="Search vendor name")
+        with col2:
+            category_filter = st.selectbox("Category", [
+                "", "Food & Dining", "Travel & Transport", "Health & Medical",
+                "Office & Supplies", "Utilities", "Entertainment",
+                "Shopping", "Education", "Finance", "Miscellaneous"
+            ])
+        with col3:
+            st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+            show_flagged = st.checkbox("Show only flagged")
 
-    col4, col5, col6, col7 = st.columns(4)
-    with col4:
-        start_date = st.date_input("From date", value=None)
-    with col5:
-        end_date = st.date_input("To date", value=None)
-    with col6:
-        min_amount = st.number_input("Min amount", min_value=0.0, value=0.0)
-    with col7:
-        max_amount = st.number_input("Max amount", min_value=0.0, value=0.0)
+        col4, col5, col6, col7 = st.columns(4)
+        with col4:
+            start_date = st.date_input("From date", value=None)
+        with col5:
+            end_date = st.date_input("To date", value=None)
+        with col6:
+            min_amount = st.number_input("Min amount", min_value=0.0, value=0.0)
+        with col7:
+            max_amount = st.number_input("Max amount", min_value=0.0, value=0.0)
 
     params = {}
     if vendor_filter:
@@ -1012,41 +1018,99 @@ def show_expenses_page():
         ).json()
         expenses = data.get("expenses", [])
 
-        st.divider()
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Expenses", data.get("count", 0))
-        with col2:
-            st.metric("Total Spend", f"Rs {data.get('total_spend', 0):,.2f}")
-        with col3:
-            st.metric("Flagged", data.get("flagged_count", 0))
+        st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
 
-        if expenses:
-            df = pd.DataFrame(expenses)
-            display_cols = [
-                "id", "vendor_name", "total_amount", "primary_category",
-                "transaction_date", "payment_method", "fraud_risk_score", "status"
-            ]
-            display_cols = [c for c in display_cols if c in df.columns]
-            df_display = df[display_cols].copy()
-            df_display.columns = [
-                {"id": "ID", "vendor_name": "Vendor", "total_amount": "Amount (Rs)",
-                 "primary_category": "Category", "transaction_date": "Transaction Date",
-                 "payment_method": "Payment Method", "fraud_risk_score": "Fraud Risk",
-                 "status": "Status"}.get(c, c)
-                for c in display_cols
-            ]
-            st.dataframe(df_display, use_container_width=True)
-            csv = df.to_csv(index=False)
-            st.download_button(
-                "Download as CSV", data=csv,
-                file_name="expenses.csv", mime="text/csv"
-            )
-        else:
-            st.info("No expenses found.")
+        kpi1, kpi2, kpi3 = st.columns(3)
+
+        with kpi1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:16px;">
+              <div style="width:48px;height:48px;border-radius:50%;background:#FCE0E8;
+                   display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+                👛
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Total Expenses</div>
+                <div style="font-size:26px;font-weight:800;color:#1C1424;">{data.get('count', 0)}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with kpi2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:16px;">
+              <div style="width:48px;height:48px;border-radius:50%;background:#F3E8FB;
+                   display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+                💲
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Total Spend</div>
+                <div style="font-size:26px;font-weight:800;color:#1C1424;">Rs {data.get('total_spend', 0):,.2f}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with kpi3:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:16px;">
+              <div style="width:48px;height:48px;border-radius:50%;background:#FEF3E2;
+                   display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+                🚩
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Flagged</div>
+                <div style="font-size:26px;font-weight:800;color:#1C1424;">{data.get('flagged_count', 0)}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
+
+        with st.container(border=True):
+            header_left, header_right = st.columns([3, 1])
+            with header_left:
+                st.markdown(
+                    "<div style='font-size:16px;font-weight:700;color:#1C1424;padding-top:6px;'>"
+                    "Approved Expenses</div>",
+                    unsafe_allow_html=True
+                )
+            with header_right:
+                if expenses:
+                    df_for_csv = pd.DataFrame(expenses)
+                    csv = df_for_csv.to_csv(index=False)
+                    st.download_button(
+                        "⬇ Download as CSV", data=csv,
+                        file_name="expenses.csv", mime="text/csv",
+                        use_container_width=True
+                    )
+
+            if expenses:
+                df = pd.DataFrame(expenses)
+                display_cols = [
+                    "id", "vendor_name", "total_amount", "primary_category",
+                    "transaction_date", "payment_method", "fraud_risk_score", "status"
+                ]
+                display_cols = [c for c in display_cols if c in df.columns]
+                df_display = df[display_cols].copy()
+                df_display.columns = [
+                    {"id": "ID", "vendor_name": "Vendor", "total_amount": "Amount (Rs)",
+                     "primary_category": "Category", "transaction_date": "Transaction Date",
+                     "payment_method": "Payment Method", "fraud_risk_score": "Fraud Risk",
+                     "status": "Status"}.get(c, c)
+                    for c in display_cols
+                ]
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                st.caption(f"Showing {len(expenses)} approved expense(s)")
+            else:
+                st.info("No expenses found.")
     except Exception as e:
         st.error(f"Could not load expenses: {str(e)}")
-
 
 def show_pending_page():
     st.title("Pending Verification")
