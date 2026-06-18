@@ -1249,13 +1249,42 @@ def show_rejected_page():
             return
 
         st.error(f"{len(expenses)} rejected expense(s) archived.")
-        df = pd.DataFrame(expenses)
-        display_cols = [
-            "id", "vendor_name", "total_amount", "primary_category",
-            "transaction_date", "fraud_risk_score"
-        ]
-        display_cols = [c for c in display_cols if c in df.columns]
-        st.dataframe(df[display_cols], use_container_width=True)
+
+        header_html = (
+            "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:14px;"
+            "overflow:hidden;box-shadow:0 2px 10px rgba(45,27,46,.05);'>"
+            "<table style='width:100%;border-collapse:collapse;'>"
+            "<thead><tr style='background:#FAF5F7;'>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>ID</th>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Vendor Name</th>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Total Amount</th>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Primary Category</th>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Transaction Date</th>"
+            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Fraud Risk Score</th>"
+            "</tr></thead><tbody>"
+        )
+
+        rows_html = ""
+        for i, e in enumerate(expenses):
+            risk = e.get("fraud_risk_score", 0) or 0
+            rows_html += (
+                "<tr style='border-top:1px solid #F0DCE4;'>"
+                f"<td style='padding:14px 18px;font-size:14px;color:#6D6578;'>{i}</td>"
+                f"<td style='padding:14px 18px;font-size:14px;font-weight:700;color:#1C1424;'>{e.get('vendor_name', '—')}</td>"
+                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('total_amount', 0):,.0f}</td>"
+                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('primary_category', '—')}</td>"
+                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('transaction_date', '—')}</td>"
+                "<td style='padding:14px 18px;'>"
+                "<span style='background:#FCE0E8;color:#EC105C;font-weight:700;font-size:13px;"
+                f"padding:4px 12px;border-radius:20px;display:inline-block;'>{risk:.1f}</span>"
+                "</td>"
+                "</tr>"
+            )
+
+        footer_html = "</tbody></table></div>"
+
+        st.markdown(header_html + rows_html + footer_html, unsafe_allow_html=True)
+
     except Exception as e:
         st.error(f"Could not load rejected expenses: {str(e)}")
 
