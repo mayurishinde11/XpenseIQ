@@ -1306,21 +1306,42 @@ def show_reports_page():
             st.info("No approved expenses yet.")
             return
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Spend", f"Rs {summary.get('total_spend', 0):,.2f}")
-        with col2:
-            st.metric("Transactions", summary.get("transaction_count", 0))
-        with col3:
-            st.metric("Avg Transaction", f"Rs {summary.get('avg_transaction', 0):,.2f}")
-        with col4:
-            st.metric("Pending Review", summary.get("pending_count", 0))
+        # ── KPI Cards ────────────────────────────────────────────────
+        kpi_data = [
+            ("👛", "#FCE0E8", "Total Spend", f"Rs {summary.get('total_spend', 0):,.2f}"),
+            ("⇄", "#F3E8FB", "Transactions", str(summary.get("transaction_count", 0))),
+            ("📈", "#FEF0E6", "Avg Transaction", f"Rs {summary.get('avg_transaction', 0):,.2f}"),
+            ("🕐", "#E3F8EC", "Pending Review", str(summary.get("pending_count", 0))),
+        ]
+        kcols = st.columns(4)
+        for col, (icon, bg, label, value) in zip(kcols, kpi_data):
+            with col:
+                st.markdown(f"""
+                <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                     padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                     display:flex;align-items:center;gap:14px;">
+                  <div style="width:44px;height:44px;border-radius:50%;background:{bg};
+                       display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                    {icon}
+                  </div>
+                  <div>
+                    <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">{label}</div>
+                    <div style="font-size:22px;font-weight:800;color:#1C1424;">{value}</div>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        st.divider()
+        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+
         col1, col2 = st.columns(2)
 
+        # ── Spend by Category ───────────────────────────────────────
         with col1:
-            st.subheader("Spend by Category")
+            st.markdown(
+                "<div style='font-size:17px;font-weight:700;color:#1C1424;margin-bottom:10px;'>"
+                "Spend by Category</div>",
+                unsafe_allow_html=True
+            )
             cat_data = summary.get("category_breakdown", {})
             if cat_data:
                 df_cat = pd.DataFrame(
@@ -1329,11 +1350,39 @@ def show_reports_page():
                 df_cat["Share"] = (
                     df_cat["Amount"] / df_cat["Amount"].sum() * 100
                 ).round(1).astype(str) + "%"
-                st.dataframe(df_cat, use_container_width=True, hide_index=True)
-                st.bar_chart(df_cat.set_index("Category")["Amount"])
 
+                table_html = (
+                    "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
+                    "overflow:hidden;margin-bottom:14px;'>"
+                    "<table style='width:100%;border-collapse:collapse;'>"
+                    "<thead><tr style='background:#FCE0E8;'>"
+                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Category</th>"
+                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Amount (Rs)</th>"
+                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Share</th>"
+                    "</tr></thead><tbody>"
+                )
+                for _, row in df_cat.iterrows():
+                    table_html += (
+                        "<tr style='border-top:1px solid #F3E1E8;'>"
+                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Category']}</td>"
+                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Amount']:,.0f}</td>"
+                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Share']}</td>"
+                        "</tr>"
+                    )
+                table_html += "</tbody></table></div>"
+                st.markdown(table_html, unsafe_allow_html=True)
+
+                chart_df = df_cat.set_index("Category")[["Amount"]]
+                chart_df.columns = ["Amount (Rs)"]
+                st.bar_chart(chart_df, color="#EC105C")
+
+        # ── Top 5 Vendors ────────────────────────────────────────────
         with col2:
-            st.subheader("Top 5 Vendors")
+            st.markdown(
+                "<div style='font-size:17px;font-weight:700;color:#1C1424;margin-bottom:10px;'>"
+                "Top 5 Vendors</div>",
+                unsafe_allow_html=True
+            )
             df_exp = pd.DataFrame(expenses)
             if "vendor_name" in df_exp.columns:
                 top_v = (
@@ -1344,27 +1393,94 @@ def show_reports_page():
                     .reset_index()
                 )
                 top_v.columns = ["Vendor", "Total Spend"]
-                st.dataframe(top_v, use_container_width=True, hide_index=True)
-                st.bar_chart(top_v.set_index("Vendor"))
 
-        st.divider()
-        st.subheader("All Approved Expenses")
-        df_all = pd.DataFrame(expenses)
-        if not df_all.empty:
-            cols = [
-                "vendor_name", "total_amount", "primary_category",
-                "transaction_date", "payment_method", "fraud_risk_score"
-            ]
-            cols = [c for c in cols if c in df_all.columns]
-            st.dataframe(df_all[cols], use_container_width=True, hide_index=True)
-            csv = df_all.to_csv(index=False)
-            st.download_button(
-                "Download Report CSV", data=csv,
-                file_name="xpenseiq_report.csv", mime="text/csv",
-                use_container_width=True
+                table_html = (
+                    "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
+                    "overflow:hidden;margin-bottom:14px;'>"
+                    "<table style='width:100%;border-collapse:collapse;'>"
+                    "<thead><tr style='background:#FCE0E8;'>"
+                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Vendor</th>"
+                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Total Spend (Rs)</th>"
+                    "</tr></thead><tbody>"
+                )
+                for _, row in top_v.iterrows():
+                    table_html += (
+                        "<tr style='border-top:1px solid #F3E1E8;'>"
+                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Vendor']}</td>"
+                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Total Spend']:,.0f}</td>"
+                        "</tr>"
+                    )
+                table_html += "</tbody></table></div>"
+                st.markdown(table_html, unsafe_allow_html=True)
+
+                chart_df = top_v.set_index("Vendor")[["Total Spend"]]
+                chart_df.columns = ["Amount (Rs)"]
+                st.bar_chart(chart_df, color="#EC105C")
+
+        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+
+        # ── All Approved Expenses ───────────────────────────────────
+        header_left, header_right = st.columns([3, 1])
+        with header_left:
+            st.markdown(
+                "<div style='font-size:17px;font-weight:700;color:#1C1424;padding-top:6px;'>"
+                "All Approved Expenses</div>",
+                unsafe_allow_html=True
             )
+
+        df_all = pd.DataFrame(expenses)
+        with header_right:
+            if not df_all.empty:
+                csv = df_all.to_csv(index=False)
+                st.download_button(
+                    "⬇ Download as CSV", data=csv,
+                    file_name="xpenseiq_report.csv", mime="text/csv",
+                    use_container_width=True
+                )
+
+        if not df_all.empty:
+            table_html = (
+                "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
+                "overflow:hidden;margin-top:10px;box-shadow:0 2px 10px rgba(45,27,46,.05);'>"
+                "<table style='width:100%;border-collapse:collapse;'>"
+                "<thead><tr style='background:#FCE0E8;'>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Vendor Name</th>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Total Amount (Rs)</th>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Primary Category</th>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Transaction Date</th>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Payment Method</th>"
+                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Fraud Risk Score</th>"
+                "</tr></thead><tbody>"
+            )
+            for _, row in df_all.iterrows():
+                risk = row.get("fraud_risk_score", 0) or 0
+                vendor = row.get("vendor_name") or "—"
+                amount = row.get("total_amount")
+                amount_str = f"{amount:,.2f}" if amount is not None else "—"
+                category = row.get("primary_category") or "—"
+                date = row.get("transaction_date") or "—"
+                payment = row.get("payment_method") or "—"
+
+                badge_color = "#16A34A" if risk < 0.3 else "#c2410c" if risk < 0.5 else "#EC105C"
+                badge_bg = "#E3F8EC" if risk < 0.3 else "#FEF3E2" if risk < 0.5 else "#FCE0E8"
+
+                table_html += (
+                    "<tr style='border-top:1px solid #F3E1E8;'>"
+                    f"<td style='padding:12px 16px;font-size:13px;font-weight:700;color:#1C1424;'>{vendor}</td>"
+                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{amount_str}</td>"
+                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{category}</td>"
+                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{date}</td>"
+                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{payment}</td>"
+                    "<td style='padding:12px 16px;'>"
+                    f"<span style='background:{badge_bg};color:{badge_color};font-weight:700;font-size:12px;"
+                    f"padding:3px 10px;border-radius:20px;display:inline-block;'>{risk:.1f}</span>"
+                    "</td>"
+                    "</tr>"
+                )
+            table_html += "</tbody></table></div>"
+            st.markdown(table_html, unsafe_allow_html=True)
+
     except Exception as e:
         st.error(f"Could not load reports: {str(e)}")
-
 
 main()
