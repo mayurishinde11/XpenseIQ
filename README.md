@@ -9,7 +9,7 @@ An enterprise-grade AI-powered expense management system that automatically extr
 
 ## Live Demo
 
-- **Dashboard:** https://frontend-production-fdc9.up.railway.app
+- **Dashboard:** radiant-tranquility-production.up.railway.app
 - **API Docs:** https://xpenseiq-production.up.railway.app/docs
 
 ## Features
