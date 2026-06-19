@@ -1139,7 +1139,7 @@ def show_pending_page():
                 risk_label = "LOW"
 
             risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
-            risk_bg = "#FCE0E8" if risk >= 0.5 else "#FFF3E0" if risk >= 0.3 else "#F3E8FB"
+            risk_bg = "#FFFFFF" if risk >= 0.5 else "#FFFFFF" if risk >= 0.3 else "#FFFFFF"
 
             with st.container(border=True):
                 st.markdown(
