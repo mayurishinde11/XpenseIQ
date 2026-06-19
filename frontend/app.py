@@ -1116,6 +1116,14 @@ def show_pending_page():
     st.title("Pending Verification")
     st.caption("Flagged expenses awaiting review. These are NOT counted in totals.")
 
+    st.markdown("""
+    <style>
+    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #FFFFFF !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     try:
         expenses = requests.get(
             f"{BACKEND_URL}/expenses/pending", headers=get_headers()
@@ -1139,7 +1147,20 @@ def show_pending_page():
                 risk_label = "LOW"
 
             risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
-            risk_bg = "#FFFFFF" if risk >= 0.5 else "#FFFFFF" if risk >= 0.3 else "#FFFFFF"
+            risk_bg = "#FCE4EC" if risk >= 0.5 else "#FFF3E0" if risk >= 0.3 else "#F3E8FB"
+
+            if flags:
+                flag_html = (
+                    "<div style='font-size:13px;font-weight:700;color:#1C1424;"
+                    "margin-bottom:4px;'>Fraud Flags:</div>"
+                )
+                for f in flags:
+                    flag_html += (
+                        "<div style='font-size:13px;color:#1C1424;margin-bottom:4px;'>"
+                        "<span style='color:#EC105C;'>●</span> <strong>" + str(f) + "</strong></div>"
+                    )
+            else:
+                flag_html = "<div style='font-size:13px;color:#6D6578;'>No flags detected</div>"
 
             with st.container(border=True):
                 st.markdown(
@@ -1154,6 +1175,7 @@ def show_pending_page():
 
                 with col_details:
                     st.markdown(
+                        "<div style='background:#FFFFFF;padding:4px;'>"
                         "<div style='font-size:12px;color:#6D6578;'>Vendor:</div>"
                         "<div style='font-size:15px;font-weight:700;color:#1C1424;margin-bottom:12px;'>"
                         + str(expense.get('vendor_name', '—')) + "</div>"
@@ -1165,41 +1187,26 @@ def show_pending_page():
                         + str(expense.get('primary_category', '—')) + "</div>"
                         "<div style='font-size:12px;color:#6D6578;'>Date:</div>"
                         "<div style='font-size:15px;font-weight:700;color:#1C1424;'>"
-                        + str(expense.get('transaction_date', '—')) + "</div>",
+                        + str(expense.get('transaction_date', '—')) + "</div>"
+                        "</div>",
                         unsafe_allow_html=True
                     )
 
                 with col_risk:
                     st.markdown(
+                        "<div style='background:#FFFFFF;padding:4px;'>"
                         "<div style='background:" + risk_bg + ";border-radius:10px;"
                         "padding:14px 16px;margin-bottom:14px;'>"
                         "<span style='font-size:14px;font-weight:600;color:" + risk_color + ";'>"
                         "🛡️ Fraud Risk: <strong>" + f"{risk:.2f} — {risk_label}" + "</strong></span>"
+                        "</div>"
+                        "<div style='font-size:13px;color:#1C1424;margin-bottom:14px;'>"
+                        "OCR Confidence: <strong style='color:#EC105C;'>"
+                        + f"{expense.get('confidence_score', 0):.0%}" + "</strong></div>"
+                        + flag_html +
                         "</div>",
                         unsafe_allow_html=True
                     )
-                    st.markdown(
-                        "<div style='font-size:13px;color:#1C1424;margin-bottom:14px;'>"
-                        "OCR Confidence: <strong style='color:#EC105C;'>"
-                        + f"{expense.get('confidence_score', 0):.0%}" + "</strong></div>",
-                        unsafe_allow_html=True
-                    )
-                    if flags:
-                        flag_html = (
-                            "<div style='font-size:13px;font-weight:700;color:#1C1424;"
-                            "margin-bottom:4px;'>Fraud Flags:</div>"
-                        )
-                        for f in flags:
-                            flag_html += (
-                                "<div style='font-size:13px;color:#1C1424;margin-bottom:4px;'>"
-                                "<span style='color:#EC105C;'>●</span> <strong>" + str(f) + "</strong></div>"
-                            )
-                        st.markdown(flag_html, unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            "<div style='font-size:13px;color:#6D6578;'>No flags detected</div>",
-                            unsafe_allow_html=True
-                        )
 
                 with col_buttons:
                     st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
@@ -1230,7 +1237,6 @@ def show_pending_page():
 
     except Exception as e:
         st.error(f"Could not load pending expenses: {str(e)}")
-
 
 def show_rejected_page():
     import pandas as pd
