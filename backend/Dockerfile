@@ -5,4 +5,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --timeout=120 -r requirements.txt
 COPY . .
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 300 --workers 1"]
