@@ -596,8 +596,17 @@ def show_scan_page():
     st.markdown("""
     <style>
     [data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #FFFFFF !important;
+            border-radius: 14px !important;
+            min-height: 340px !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:first-of-type {
+        background-color: #FDF4F7 !important;
+    }
+    [data-testid="stFileUploaderDropzone"] {
         background-color: #FFFFFF !important;
-        border-radius: 14px !important;
+        border: 2px dashed #E91E63 !important;
+        border-radius: 12px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -607,22 +616,10 @@ def show_scan_page():
     with col_left:
         st.markdown("#### Upload Receipt")
         with st.container(border=True):
-            st.markdown("""
-            <div style="border:2px dashed #E0D0D8;border-radius:12px;padding:28px 16px;
-                 text-align:center;background:#FDF4F7;margin-bottom:12px;">
-              <div style="font-size:32px;margin-bottom:8px;">📤</div>
-              <div style="font-size:14px;font-weight:700;color:#AA225B;margin-bottom:4px;">
-                Upload Receipt Here
-              </div>
-              <div style="font-size:12px;color:#8A6D7C;">Click browse or drag and drop</div>
-            </div>
-            """, unsafe_allow_html=True)
-
             uploaded_files = st.file_uploader(
-                "Browse files",
+                "Click to upload or drag and drop",
                 type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "pdf"],
                 accept_multiple_files=True,
-                label_visibility="visible"
             )
             st.caption("Supported: JPG, PNG, WEBP, TIFF, BMP, PDF · Max 10MB per file")
 
@@ -722,7 +719,7 @@ def show_scan_page():
         with st.container(border=True):
             if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
                 st.markdown("""
-                <div style="padding:80px 20px;text-align:center;">
+                <div style="padding:60px 20px;text-align:center;">
                   <div style="font-size:48px;margin-bottom:12px;">📄</div>
                   <div style="font-size:14px;font-weight:600;color:#4B4458;margin-bottom:6px;">
                     No document selected
@@ -798,20 +795,31 @@ def show_scan_page():
                         import pandas as pd
                         st.dataframe(pd.DataFrame(items), use_container_width=True, hide_index=True)
                 else:
-                    st.error(f"Failed: {result.get('error', 'Unknown error')}")
+                    st.markdown(f"""
+                    <div style="background:#FFF5F5;border:1px solid #FED7D7;border-radius:12px;
+                         padding:20px;text-align:center;margin-top:20px;">
+                      <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+                      <div style="font-size:14px;font-weight:700;color:#C53030;margin-bottom:6px;">
+                        Processing Failed
+                      </div>
+                      <div style="font-size:12px;color:#742A2A;">
+                        {result.get('error', 'Unknown error')}
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     with col_right:
         st.markdown("#### AI Analysis")
         with st.container(border=True):
             if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
                 st.markdown("""
-                <div style="padding:80px 16px;text-align:center;">
+                <div style="padding:60px 16px;text-align:center;">
                   <div style="font-size:36px;margin-bottom:10px;">🤖</div>
                   <div style="font-size:13px;font-weight:600;color:#4B4458;margin-bottom:4px;">
                     AI Ready
                   </div>
                   <div style="font-size:11px;color:#6D6578;">
-                    Upload and scan a receipt to see AI extraction results
+                    Upload and scan a receipt to see AI extracted results
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -949,7 +957,18 @@ def show_scan_page():
                                     st.success("Rejected")
                                     st.rerun()
                 else:
-                    st.error(f"Processing failed: {result.get('error','Unknown error')}")
+                    st.markdown(f"""
+                    <div style="background:#FFF5F5;border:1px solid #FED7D7;border-radius:12px;
+                         padding:20px;text-align:center;margin-top:20px;">
+                      <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+                      <div style="font-size:14px;font-weight:700;color:#C53030;margin-bottom:6px;">
+                        Processing Failed
+                      </div>
+                      <div style="font-size:12px;color:#742A2A;">
+                        {result.get('error', 'Unknown error')}
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
 def show_expenses_page():
     import pandas as pd
