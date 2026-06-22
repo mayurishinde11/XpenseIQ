@@ -1259,44 +1259,121 @@ def show_rejected_page():
         ).json().get("expenses", [])
 
         if not expenses:
-            st.info("No rejected expenses.")
+            st.markdown("""
+            <div style="text-align:center;padding:80px 20px;">
+              <div style="font-size:56px;margin-bottom:16px;">🗃️</div>
+              <div style="font-size:20px;font-weight:700;color:#2D1B2E;margin-bottom:8px;">
+                No Rejected Expenses
+              </div>
+              <div style="font-size:14px;color:#8A6D7C;">
+                Expenses you reject will be archived here.
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
             return
 
-        st.error(f"{len(expenses)} rejected expense(s) archived.")
+        total_rejected = len(expenses)
+        total_blocked  = sum(e.get("total_amount", 0) or 0 for e in expenses)
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#FCE0E8;
+                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                🚫
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Total Rejected</div>
+                <div style="font-size:24px;font-weight:800;color:#1C1424;">{total_rejected}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with k2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#FEF3E2;
+                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                🛡️
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Amount Blocked</div>
+                <div style="font-size:24px;font-weight:800;color:#1C1424;">Rs {total_blocked:,.0f}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with k3:
+            avg_risk = sum(e.get("fraud_risk_score", 0) or 0 for e in expenses) / total_rejected
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
+                 display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#FCE0E8;
+                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                ⚠️
+              </div>
+              <div>
+                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Avg Risk Score</div>
+                <div style="font-size:24px;font-weight:800;color:#EC105C;">{avg_risk:.2f}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
 
         header_html = (
-            "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:14px;"
+            "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;"
             "overflow:hidden;box-shadow:0 2px 10px rgba(45,27,46,.05);'>"
+            "<div style='background:#FCF7F9;padding:16px 20px;border-bottom:1px solid #F0DCE4;"
+            "display:flex;align-items:center;justify-content:space-between;'>"
+            "<div style='font-size:15px;font-weight:700;color:#1C1424;'>Archived Expenses</div>"
+            f"<div style='font-size:12px;color:#8A6D7C;background:#FCE0E8;padding:4px 12px;"
+            f"border-radius:20px;font-weight:600;'>{total_rejected} records</div>"
+            "</div>"
             "<table style='width:100%;border-collapse:collapse;'>"
-            "<thead><tr style='background:#FAF5F7;'>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>ID</th>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Vendor Name</th>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Total Amount</th>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Primary Category</th>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Transaction Date</th>"
-            "<th style='padding:14px 18px;text-align:left;font-size:13px;font-weight:700;color:#1C1424;'>Fraud Risk Score</th>"
+            "<thead><tr style='background:#FAFAFA;'>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;width:60px;'>ID</th>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Vendor Name</th>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Total Amount</th>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Category</th>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Date</th>"
+            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
+            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Risk Score</th>"
             "</tr></thead><tbody>"
         )
 
         rows_html = ""
         for i, e in enumerate(expenses):
             risk = e.get("fraud_risk_score", 0) or 0
+            badge_bg    = "#FCE0E8" if risk >= 0.5 else "#FEF3E2"
+            badge_color = "#EC105C" if risk >= 0.5 else "#c2410c"
+            row_bg = "#FFFFFF" if i % 2 == 0 else "#FDFAFB"
             rows_html += (
-                "<tr style='border-top:1px solid #F0DCE4;'>"
-                f"<td style='padding:14px 18px;font-size:14px;color:#6D6578;'>{i}</td>"
-                f"<td style='padding:14px 18px;font-size:14px;font-weight:700;color:#1C1424;'>{e.get('vendor_name', '—')}</td>"
-                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('total_amount', 0):,.0f}</td>"
-                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('primary_category', '—')}</td>"
-                f"<td style='padding:14px 18px;font-size:14px;color:#1C1424;'>{e.get('transaction_date', '—')}</td>"
-                "<td style='padding:14px 18px;'>"
-                "<span style='background:#FCE0E8;color:#EC105C;font-weight:700;font-size:13px;"
+                f"<tr style='border-top:1px solid #F3E1E8;background:{row_bg};'>"
+                f"<td style='padding:14px 16px;font-size:13px;color:#8A6D7C;font-weight:500;'>{i}</td>"
+                f"<td style='padding:14px 16px;font-size:14px;font-weight:700;color:#1C1424;'>{e.get('vendor_name','—')}</td>"
+                f"<td style='padding:14px 16px;font-size:13px;color:#E91E63;font-weight:600;'>Rs {e.get('total_amount',0):,.0f}</td>"
+                f"<td style='padding:14px 16px;font-size:13px;color:#1C1424;'>{e.get('primary_category','—')}</td>"
+                f"<td style='padding:14px 16px;font-size:13px;color:#6D6578;'>{e.get('transaction_date','—')}</td>"
+                f"<td style='padding:14px 16px;'>"
+                f"<span style='background:{badge_bg};color:{badge_color};font-weight:700;font-size:12px;"
                 f"padding:4px 12px;border-radius:20px;display:inline-block;'>{risk:.1f}</span>"
-                "</td>"
-                "</tr>"
+                f"</td>"
+                f"</tr>"
             )
 
         footer_html = "</tbody></table></div>"
-
         st.markdown(header_html + rows_html + footer_html, unsafe_allow_html=True)
 
     except Exception as e:
