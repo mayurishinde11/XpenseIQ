@@ -171,6 +171,7 @@ def show_main_app():
                 st.session_state.page = page_key
                 st.rerun()
         st.divider()
+    
         if st.button("Logout", use_container_width=True, key="nav_logout"):
             for k in ["token", "user_id", "email", "full_name"]:
                 st.session_state[k] = None
@@ -1259,122 +1260,96 @@ def show_rejected_page():
         ).json().get("expenses", [])
 
         if not expenses:
-            st.markdown("""
-            <div style="text-align:center;padding:80px 20px;">
-              <div style="font-size:56px;margin-bottom:16px;">🗃️</div>
-              <div style="font-size:20px;font-weight:700;color:#2D1B2E;margin-bottom:8px;">
-                No Rejected Expenses
-              </div>
-              <div style="font-size:14px;color:#8A6D7C;">
-                Expenses you reject will be archived here.
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.info("No rejected expenses.")
             return
 
-        total_rejected = len(expenses)
-        total_blocked  = sum(e.get("total_amount", 0) or 0 for e in expenses)
-
-        k1, k2, k3 = st.columns(3)
-        with k1:
-            st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
-                 display:flex;align-items:center;gap:14px;">
-              <div style="width:44px;height:44px;border-radius:50%;background:#FCE0E8;
-                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-                🚫
-              </div>
-              <div>
-                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Total Rejected</div>
-                <div style="font-size:24px;font-weight:800;color:#1C1424;">{total_rejected}</div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with k2:
-            st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
-                 display:flex;align-items:center;gap:14px;">
-              <div style="width:44px;height:44px;border-radius:50%;background:#FEF3E2;
-                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-                🛡️
-              </div>
-              <div>
-                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Amount Blocked</div>
-                <div style="font-size:24px;font-weight:800;color:#1C1424;">Rs {total_blocked:,.0f}</div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with k3:
-            avg_risk = sum(e.get("fraud_risk_score", 0) or 0 for e in expenses) / total_rejected
-            st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
-                 display:flex;align-items:center;gap:14px;">
-              <div style="width:44px;height:44px;border-radius:50%;background:#FCE0E8;
-                   display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-                ⚠️
-              </div>
-              <div>
-                <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">Avg Risk Score</div>
-                <div style="font-size:24px;font-weight:800;color:#EC105C;">{avg_risk:.2f}</div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
-
-        header_html = (
-            "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;"
-            "overflow:hidden;box-shadow:0 2px 10px rgba(45,27,46,.05);'>"
-            "<div style='background:#FCF7F9;padding:16px 20px;border-bottom:1px solid #F0DCE4;"
-            "display:flex;align-items:center;justify-content:space-between;'>"
-            "<div style='font-size:15px;font-weight:700;color:#1C1424;'>Archived Expenses</div>"
-            f"<div style='font-size:12px;color:#8A6D7C;background:#FCE0E8;padding:4px 12px;"
-            f"border-radius:20px;font-weight:600;'>{total_rejected} records</div>"
-            "</div>"
-            "<table style='width:100%;border-collapse:collapse;'>"
-            "<thead><tr style='background:#FAFAFA;'>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;width:60px;'>ID</th>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Vendor Name</th>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Total Amount</th>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Category</th>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Date</th>"
-            "<th style='padding:12px 16px;text-align:left;font-size:11px;font-weight:700;"
-            "color:#8A6D7C;text-transform:uppercase;letter-spacing:.06em;'>Risk Score</th>"
-            "</tr></thead><tbody>"
-        )
+        st.error(f"{len(expenses)} rejected expense(s) archived.")
 
         rows_html = ""
-        for i, e in enumerate(expenses):
-            risk = e.get("fraud_risk_score", 0) or 0
-            badge_bg    = "#FCE0E8" if risk >= 0.5 else "#FEF3E2"
-            badge_color = "#EC105C" if risk >= 0.5 else "#c2410c"
-            row_bg = "#FFFFFF" if i % 2 == 0 else "#FDFAFB"
-            rows_html += (
-                f"<tr style='border-top:1px solid #F3E1E8;background:{row_bg};'>"
-                f"<td style='padding:14px 16px;font-size:13px;color:#8A6D7C;font-weight:500;'>{i}</td>"
-                f"<td style='padding:14px 16px;font-size:14px;font-weight:700;color:#1C1424;'>{e.get('vendor_name','—')}</td>"
-                f"<td style='padding:14px 16px;font-size:13px;color:#E91E63;font-weight:600;'>Rs {e.get('total_amount',0):,.0f}</td>"
-                f"<td style='padding:14px 16px;font-size:13px;color:#1C1424;'>{e.get('primary_category','—')}</td>"
-                f"<td style='padding:14px 16px;font-size:13px;color:#6D6578;'>{e.get('transaction_date','—')}</td>"
-                f"<td style='padding:14px 16px;'>"
-                f"<span style='background:{badge_bg};color:{badge_color};font-weight:700;font-size:12px;"
-                f"padding:4px 12px;border-radius:20px;display:inline-block;'>{risk:.1f}</span>"
-                f"</td>"
-                f"</tr>"
-            )
+        for expense in expenses:
+            vendor = expense.get("vendor_name", "—") or "—"
+            amount = expense.get("total_amount", 0) or 0
+            category = expense.get("primary_category", "—") or "—"
+            date = str(expense.get("transaction_date", "—") or "—")
+            payment = expense.get("payment_method", "—") or "—"
+            risk = expense.get("fraud_risk_score", 0) or 0
+            risk_pct = int(risk * 100)
+            location = expense.get("location") or expense.get("vendor_address") or "—"
 
-        footer_html = "</tbody></table></div>"
-        st.markdown(header_html + rows_html + footer_html, unsafe_allow_html=True)
+            if risk >= 0.7:
+                risk_label = "High Risk"
+                bar_color = "#991B1B"
+                risk_text_color = "#991B1B"
+            elif risk >= 0.4:
+                risk_label = "Medium Risk"
+                bar_color = "#E91E63"
+                risk_text_color = "#E91E63"
+            else:
+                risk_label = "Low Risk"
+                bar_color = "#E91E63"
+                risk_text_color = "#8A6D7C"
+
+            rows_html += f"""
+            <tr style="border-bottom:1px solid #F3D6E0;">
+              <td style="padding:14px 16px;vertical-align:middle;">
+                <div style="font-size:13px;font-weight:700;color:#2D1B2E;">{vendor}</div>
+                <div style="font-size:11px;color:#8A6D7C;margin-top:2px;">{category}</div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:middle;">
+                <div style="font-size:14px;font-weight:700;color:#E91E63;">
+                  Rs {amount:,.0f}
+                </div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:middle;">
+                <div style="font-size:13px;color:#2D1B2E;">{date}</div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:middle;min-width:140px;">
+                <div style="font-size:13px;font-weight:700;color:{risk_text_color};
+                     margin-bottom:4px;">{risk_pct}
+                  <span style="font-size:11px;font-weight:400;">{risk_label}</span>
+                </div>
+                <div style="background:#F3D6E0;border-radius:4px;height:5px;width:100px;">
+                  <div style="width:{risk_pct}%;height:100%;background:{bar_color};
+                       border-radius:4px;"></div>
+                </div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:middle;">
+                <div style="font-size:13px;color:#2D1B2E;">{location}</div>
+              </td>
+              <td style="padding:14px 16px;vertical-align:middle;">
+                <div style="font-size:12px;color:#8A6D7C;">{payment}</div>
+              </td>
+            </tr>"""
+
+        st.markdown(f"""
+        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+             padding:24px 24px 8px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);">
+          <div style="font-size:15px;font-weight:700;color:#2D1B2E;margin-bottom:16px;
+               letter-spacing:-0.01em;">All Rejected Expenses</div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#FCF7F9;border-bottom:2px solid #F0DCE4;">
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Vendor</th>
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Amount</th>
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Date</th>
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Risk Score</th>
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Location</th>
+                  <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                       color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Payment</th>
+                </tr>
+              </thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+          </div>
+        </div>
+        <div style="height:16px;"></div>
+        """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Could not load rejected expenses: {str(e)}")
@@ -1397,83 +1372,124 @@ def show_reports_page():
             st.info("No approved expenses yet.")
             return
 
-        # ── KPI Cards ────────────────────────────────────────────────
-        kpi_data = [
-            ("👛", "#FCE0E8", "Total Spend", f"Rs {summary.get('total_spend', 0):,.2f}"),
-            ("⇄", "#F3E8FB", "Transactions", str(summary.get("transaction_count", 0))),
-            ("📈", "#FEF0E6", "Avg Transaction", f"Rs {summary.get('avg_transaction', 0):,.2f}"),
-            ("🕐", "#E3F8EC", "Pending Review", str(summary.get("pending_count", 0))),
-        ]
-        kcols = st.columns(4)
-        for col, (icon, bg, label, value) in zip(kcols, kpi_data):
-            with col:
-                st.markdown(f"""
-                <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                     padding:18px 20px;box-shadow:0 2px 10px rgba(45,27,46,.05);
-                     display:flex;align-items:center;gap:14px;">
-                  <div style="width:44px;height:44px;border-radius:50%;background:{bg};
-                       display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-                    {icon}
-                  </div>
-                  <div>
-                    <div style="font-size:13px;color:#6D6578;margin-bottom:2px;">{label}</div>
-                    <div style="font-size:22px;font-weight:800;color:#1C1424;">{value}</div>
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4, gap="large")
 
-        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+        with c1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;border-top:4px solid #E91E63;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+              <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+                   letter-spacing:.08em;margin-bottom:12px;">Total Spend</div>
+              <div style="font-size:28px;font-weight:800;color:#2D1B2E;line-height:1;">
+                Rs {summary.get('total_spend', 0):,.0f}
+              </div>
+              <div style="font-size:12px;color:#E91E63;margin-top:8px;font-weight:600;">
+                Approved expenses only
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
+        with c2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;border-top:4px solid #22C55E;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+              <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+                   letter-spacing:.08em;margin-bottom:12px;">Transactions</div>
+              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
+                {summary.get('transaction_count', 0)}
+              </div>
+              <div style="font-size:12px;color:#22C55E;margin-top:8px;font-weight:600;">
+                Total approved count
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # ── Spend by Category ───────────────────────────────────────
+        with c3:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;border-top:4px solid #8E40B0;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+              <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+                   letter-spacing:.08em;margin-bottom:12px;">Avg Transaction</div>
+              <div style="font-size:28px;font-weight:800;color:#2D1B2E;line-height:1;">
+                Rs {summary.get('avg_transaction', 0):,.0f}
+              </div>
+              <div style="font-size:12px;color:#8E40B0;margin-top:8px;font-weight:600;">
+                Per approved expense
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c4:
+            pending_count = summary.get('pending_count', 0)
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;border-top:4px solid #F59E0B;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+              <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+                   letter-spacing:.08em;margin-bottom:12px;">Pending Review</div>
+              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
+                {pending_count}
+              </div>
+              <div style="font-size:12px;color:#F59E0B;margin-top:8px;font-weight:600;">
+                {'⚠ Needs attention' if pending_count > 0 else '✓ All clear'}
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2, gap="large")
+
         with col1:
-            st.markdown(
-                "<div style='font-size:17px;font-weight:700;color:#1C1424;margin-bottom:10px;'>"
-                "Spend by Category</div>",
-                unsafe_allow_html=True
-            )
             cat_data = summary.get("category_breakdown", {})
             if cat_data:
                 df_cat = pd.DataFrame(
-                    list(cat_data.items()), columns=["Category", "Amount"]
+                    list(cat_data.items()), columns=["Category", "Amount (Rs)"]
                 )
                 df_cat["Share"] = (
-                    df_cat["Amount"] / df_cat["Amount"].sum() * 100
+                    df_cat["Amount (Rs)"] / df_cat["Amount (Rs)"].sum() * 100
                 ).round(1).astype(str) + "%"
 
-                table_html = (
-                    "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
-                    "overflow:hidden;margin-bottom:14px;'>"
-                    "<table style='width:100%;border-collapse:collapse;'>"
-                    "<thead><tr style='background:#FCE0E8;'>"
-                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Category</th>"
-                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Amount (Rs)</th>"
-                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Share</th>"
-                    "</tr></thead><tbody>"
-                )
-                for _, row in df_cat.iterrows():
-                    table_html += (
-                        "<tr style='border-top:1px solid #F3E1E8;'>"
-                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Category']}</td>"
-                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Amount']:,.0f}</td>"
-                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Share']}</td>"
-                        "</tr>"
+                with st.container(border=True):
+                    st.markdown("""
+                    <div style="font-size:15px;font-weight:700;color:#2D1B2E;
+                         margin-bottom:12px;letter-spacing:-0.01em;">
+                      Spend by Category
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.dataframe(
+                        df_cat,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=180,
+                        column_config={
+                            "Category": st.column_config.TextColumn("Category", width="large"),
+                            "Amount (Rs)": st.column_config.NumberColumn("Amount (Rs)", format="%.0f"),
+                            "Share": st.column_config.TextColumn("Share", width="small"),
+                        }
                     )
-                table_html += "</tbody></table></div>"
-                st.markdown(table_html, unsafe_allow_html=True)
+                    import altair as alt
+                    st.altair_chart(
+                        alt.Chart(df_cat).mark_bar(
+                            color="#E91E63",
+                            cornerRadiusTopLeft=4,
+                            cornerRadiusTopRight=4
+                        ).encode(
+                            x=alt.X("Category:N", axis=alt.Axis(labelAngle=0, title="Category")),
+                            y=alt.Y("Amount (Rs):Q", axis=alt.Axis(title="Amount (Rs)")),
+                            tooltip=["Category", "Amount (Rs)", "Share"]
+                        ).properties(
+                            height=280,
+                            padding={"left": 10, "right": 20, "top": 20, "bottom": 10}
+                        ).configure_view(strokeWidth=0).configure_axis(
+                            grid=False, labelFontSize=11, titleFontSize=12
+                        ),
+                        use_container_width=True
+                    )
 
-                chart_df = df_cat.set_index("Category")[["Amount"]]
-                chart_df.columns = ["Amount (Rs)"]
-                st.bar_chart(chart_df, color="#EC105C")
-
-        # ── Top 5 Vendors ────────────────────────────────────────────
         with col2:
-            st.markdown(
-                "<div style='font-size:17px;font-weight:700;color:#1C1424;margin-bottom:10px;'>"
-                "Top 5 Vendors</div>",
-                unsafe_allow_html=True
-            )
             df_exp = pd.DataFrame(expenses)
             if "vendor_name" in df_exp.columns:
                 top_v = (
@@ -1483,95 +1499,164 @@ def show_reports_page():
                     .head(5)
                     .reset_index()
                 )
-                top_v.columns = ["Vendor", "Total Spend"]
+                top_v.columns = ["Vendor", "Total Spend (Rs)"]
 
-                table_html = (
-                    "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
-                    "overflow:hidden;margin-bottom:14px;'>"
-                    "<table style='width:100%;border-collapse:collapse;'>"
-                    "<thead><tr style='background:#FCE0E8;'>"
-                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Vendor</th>"
-                    "<th style='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Total Spend (Rs)</th>"
-                    "</tr></thead><tbody>"
-                )
-                for _, row in top_v.iterrows():
-                    table_html += (
-                        "<tr style='border-top:1px solid #F3E1E8;'>"
-                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Vendor']}</td>"
-                        f"<td style='padding:10px 14px;font-size:13px;color:#1C1424;'>{row['Total Spend']:,.0f}</td>"
-                        "</tr>"
+                with st.container(border=True):
+                    st.markdown("""
+                    <div style="font-size:15px;font-weight:700;color:#2D1B2E;
+                         margin-bottom:12px;letter-spacing:-0.01em;">
+                      Top 5 Vendors
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.dataframe(
+                        top_v,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=180,
+                        column_config={
+                            "Vendor": st.column_config.TextColumn("Vendor", width="large"),
+                            "Total Spend (Rs)": st.column_config.NumberColumn(
+                                "Total Spend (Rs)", format="%.0f"
+                            ),
+                        }
                     )
-                table_html += "</tbody></table></div>"
-                st.markdown(table_html, unsafe_allow_html=True)
+                    import altair as alt
+                    st.altair_chart(
+                        alt.Chart(top_v).mark_bar(
+                            color="#E91E63",
+                            cornerRadiusTopLeft=4,
+                            cornerRadiusTopRight=4
+                        ).encode(
+                            x=alt.X("Vendor:N", axis=alt.Axis(labelAngle=0, title="Vendor")),
+                            y=alt.Y("Total Spend (Rs):Q", axis=alt.Axis(title="Total Spend (Rs)")),
+                            tooltip=["Vendor", "Total Spend (Rs)"]
+                        ).properties(
+                            height=280,
+                            padding={"left": 10, "right": 20, "top": 20, "bottom": 10}
+                        ).configure_view(strokeWidth=0).configure_axis(
+                            grid=False, labelFontSize=11, titleFontSize=12
+                        ),
+                        use_container_width=True
+                    )
 
-                chart_df = top_v.set_index("Vendor")[["Total Spend"]]
-                chart_df.columns = ["Amount (Rs)"]
-                st.bar_chart(chart_df, color="#EC105C")
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
-
-        # ── All Approved Expenses ───────────────────────────────────
-        header_left, header_right = st.columns([3, 1])
-        with header_left:
-            st.markdown(
-                "<div style='font-size:17px;font-weight:700;color:#1C1424;padding-top:6px;'>"
-                "All Approved Expenses</div>",
-                unsafe_allow_html=True
-            )
+        st.markdown("""
+        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+             padding:24px 24px 8px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="font-size:15px;font-weight:700;color:#2D1B2E;letter-spacing:-0.01em;">
+              All Approved Expenses
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         df_all = pd.DataFrame(expenses)
-        with header_right:
-            if not df_all.empty:
-                csv = df_all.to_csv(index=False)
-                st.download_button(
-                    "⬇ Download as CSV", data=csv,
-                    file_name="xpenseiq_report.csv", mime="text/csv",
-                    use_container_width=True
-                )
-
         if not df_all.empty:
-            table_html = (
-                "<div style='background:#FFFFFF;border:1px solid #F0DCE4;border-radius:12px;"
-                "overflow:hidden;margin-top:10px;box-shadow:0 2px 10px rgba(45,27,46,.05);'>"
-                "<table style='width:100%;border-collapse:collapse;'>"
-                "<thead><tr style='background:#FCE0E8;'>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Vendor Name</th>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Total Amount (Rs)</th>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Primary Category</th>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Transaction Date</th>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Payment Method</th>"
-                "<th style='padding:12px 16px;text-align:left;font-size:12px;font-weight:700;color:#1C1424;'>Fraud Risk Score</th>"
-                "</tr></thead><tbody>"
-            )
+            rows_html = ""
             for _, row in df_all.iterrows():
+                vendor = row.get("vendor_name", "—") or "—"
+                amount = row.get("total_amount", 0) or 0
+                category = row.get("primary_category", "—") or "—"
+                date = str(row.get("transaction_date", "—") or "—")
+                payment = row.get("payment_method", "—") or "—"
                 risk = row.get("fraud_risk_score", 0) or 0
-                vendor = row.get("vendor_name") or "—"
-                amount = row.get("total_amount")
-                amount_str = f"{amount:,.2f}" if amount is not None else "—"
-                category = row.get("primary_category") or "—"
-                date = row.get("transaction_date") or "—"
-                payment = row.get("payment_method") or "—"
+                risk_pct = int(risk * 100)
 
-                badge_color = "#16A34A" if risk < 0.3 else "#c2410c" if risk < 0.5 else "#EC105C"
-                badge_bg = "#E3F8EC" if risk < 0.3 else "#FEF3E2" if risk < 0.5 else "#FCE0E8"
+                if risk >= 0.7:
+                    risk_label = "High Risk"
+                    risk_color = "#991B1B"
+                    bar_color = "#991B1B"
+                    risk_text_color = "#991B1B"
+                elif risk >= 0.4:
+                    risk_label = "Medium Risk"
+                    risk_color = "#E91E63"
+                    bar_color = "#E91E63"
+                    risk_text_color = "#E91E63"
+                else:
+                    risk_label = "Low Risk"
+                    risk_color = "#E91E63"
+                    bar_color = "#E91E63"
+                    risk_text_color = "#8A6D7C"
 
-                table_html += (
-                    "<tr style='border-top:1px solid #F3E1E8;'>"
-                    f"<td style='padding:12px 16px;font-size:13px;font-weight:700;color:#1C1424;'>{vendor}</td>"
-                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{amount_str}</td>"
-                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{category}</td>"
-                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{date}</td>"
-                    f"<td style='padding:12px 16px;font-size:13px;color:#1C1424;'>{payment}</td>"
-                    "<td style='padding:12px 16px;'>"
-                    f"<span style='background:{badge_bg};color:{badge_color};font-weight:700;font-size:12px;"
-                    f"padding:3px 10px;border-radius:20px;display:inline-block;'>{risk:.1f}</span>"
-                    "</td>"
-                    "</tr>"
-                )
-            table_html += "</tbody></table></div>"
-            st.markdown(table_html, unsafe_allow_html=True)
+                rows_html += f"""
+                <tr style="border-bottom:1px solid #F3D6E0;">
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    <div style="font-size:13px;font-weight:700;color:#2D1B2E;">{vendor}</div>
+                    <div style="font-size:11px;color:#8A6D7C;margin-top:2px;">{category}</div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    <div style="font-size:14px;font-weight:700;color:#E91E63;">
+                      Rs {amount:,.0f}
+                    </div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    <div style="font-size:13px;color:#2D1B2E;">{date}</div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;min-width:140px;">
+                    <div style="font-size:13px;font-weight:700;color:{risk_text_color};
+                         margin-bottom:4px;">{risk_pct} 
+                      <span style="font-size:11px;font-weight:400;">{risk_label}</span>
+                    </div>
+                    <div style="background:#F3D6E0;border-radius:4px;height:5px;width:100px;">
+                      <div style="width:{risk_pct}%;height:100%;background:{bar_color};
+                           border-radius:4px;"></div>
+                    </div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    <span style="background:#FCF0F5;color:#E91E63;padding:4px 12px;
+                          border-radius:20px;font-size:12px;font-weight:600;">
+                      Approved
+                    </span>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    <div style="font-size:12px;color:#8A6D7C;">{payment}</div>
+                  </td>
+                </tr>"""
 
+            csv = df_all.to_csv(index=False)
+            import urllib.parse
+            csv_href = urllib.parse.quote(csv)
+
+            st.markdown(f"""
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#FCF7F9;border-bottom:2px solid #F0DCE4;">
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Vendor</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Amount</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Date</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Risk Score</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Status</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Payment</th>
+                  </tr>
+                </thead>
+                <tbody>{rows_html}</tbody>
+              </table>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+              <a href="data:text/csv;charset=utf-8,{csv_href}"
+                 download="xpenseiq_report.csv"
+                 style="background:#8E40B0;color:#FFFFFF;padding:8px 20px;border-radius:8px;
+                        font-size:13px;font-weight:600;text-decoration:none;
+                        display:inline-flex;align-items:center;gap:6px;">
+                ⬇ Download CSV
+              </a>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+        
     except Exception as e:
         st.error(f"Could not load reports: {str(e)}")
+
 
 main()
