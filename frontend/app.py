@@ -593,87 +593,103 @@ def show_scan_page():
     st.title("Scan Receipt")
     st.caption("Upload invoices and let AI extract, validate and analyse all details automatically.")
 
+    st.markdown("""
+    <style>
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #FFFFFF !important;
+        border-radius: 14px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     col_left, col_center, col_right = st.columns([1, 1.2, 1])
 
     with col_left:
-        st.markdown("#### Upload Document")
+        st.markdown("#### Upload Receipt")
+        with st.container(border=True):
+            st.markdown("""
+            <div style="border:2px dashed #E0D0D8;border-radius:12px;padding:28px 16px;
+                 text-align:center;background:#FDF4F7;margin-bottom:12px;">
+              <div style="font-size:32px;margin-bottom:8px;">📤</div>
+              <div style="font-size:14px;font-weight:700;color:#AA225B;margin-bottom:4px;">
+                Upload Receipt Here
+              </div>
+              <div style="font-size:12px;color:#8A6D7C;">Click browse or drag and drop</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        uploaded_files = st.file_uploader(
-            "Drop files here",
-            type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "pdf"],
-            accept_multiple_files=True,
-            label_visibility="collapsed"
-        )
+            uploaded_files = st.file_uploader(
+                "Browse files",
+                type=["jpg", "jpeg", "png", "webp", "bmp", "tiff", "pdf"],
+                accept_multiple_files=True,
+                label_visibility="visible"
+            )
+            st.caption("Supported: JPG, PNG, WEBP, TIFF, BMP, PDF · Max 10MB per file")
 
-        st.caption("Supported: JPG, PNG, WEBP, TIFF, BMP, PDF · Max 10MB per file")
+            if uploaded_files:
+                st.markdown("---")
+                st.markdown(f"**{len(uploaded_files)} file(s) ready**")
+                for f in uploaded_files:
+                    ftype = "PDF" if "pdf" in f.type else "Image"
+                    size = f.size / 1024
+                    st.markdown(f"""
+                    <div style="padding:8px 10px;margin-bottom:6px;border-radius:8px;
+                         border:1px solid #e0e0e0;background:#fafafa;font-size:12px;">
+                      <div style="font-weight:600;color:#1C1424;">{f.name}</div>
+                      <div style="color:#6D6578;margin-top:2px;">{ftype} · {size:.1f} KB · 🟡 Ready</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-        if uploaded_files:
-            st.markdown("---")
-            st.markdown(f"**{len(uploaded_files)} file(s) ready**")
-            for f in uploaded_files:
-                ftype = "PDF" if "pdf" in f.type else "Image"
-                size = f.size / 1024
-                status = "🟡 Ready"
-                st.markdown(f"""
-                <div style="padding:8px 10px;margin-bottom:6px;border-radius:8px;
-                     border:1px solid #e0e0e0;background:#fafafa;font-size:12px;">
-                  <div style="font-weight:600;color:#1C1424;">{f.name}</div>
-                  <div style="color:#6D6578;margin-top:2px;">{ftype} · {size:.1f} KB · {status}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("---")
-            if st.button("Scan All Receipts", use_container_width=True, type="primary"):
-                import time
-                results = []
-                bar = st.progress(0)
-                status_txt = st.empty()
-
-                for i, file in enumerate(uploaded_files):
-                    status_txt.write(f"Processing {file.name} ({i+1}/{len(uploaded_files)})...")
-                    try:
-                        r = requests.post(
-                            f"{BACKEND_URL}/expenses/scan-receipt",
-                            headers=get_headers(),
-                            files={"file": (file.name, file.getvalue(), file.type)},
-                            timeout=60
-                        )
-                        if r.status_code == 200:
-                            results.append({
-                                "status": "success",
-                                "filename": file.name,
-                                "filetype": file.type,
-                                "data": r.json()
-                            })
-                        else:
+                st.markdown("---")
+                if st.button("Scan All Receipts", use_container_width=True, type="primary"):
+                    import time
+                    results = []
+                    bar = st.progress(0)
+                    status_txt = st.empty()
+                    for i, file in enumerate(uploaded_files):
+                        status_txt.write(f"Processing {file.name} ({i+1}/{len(uploaded_files)})...")
+                        try:
+                            r = requests.post(
+                                f"{BACKEND_URL}/expenses/scan-receipt",
+                                headers=get_headers(),
+                                files={"file": (file.name, file.getvalue(), file.type)},
+                                timeout=60
+                            )
+                            if r.status_code == 200:
+                                results.append({
+                                    "status": "success",
+                                    "filename": file.name,
+                                    "filetype": file.type,
+                                    "data": r.json()
+                                })
+                            else:
+                                results.append({
+                                    "status": "error",
+                                    "filename": file.name,
+                                    "filetype": file.type,
+                                    "error": r.json().get("detail", "Scan failed")
+                                })
+                        except requests.exceptions.Timeout:
                             results.append({
                                 "status": "error",
                                 "filename": file.name,
                                 "filetype": file.type,
-                                "error": r.json().get("detail", "Scan failed")
+                                "error": "Request timed out."
                             })
-                    except requests.exceptions.Timeout:
-                        results.append({
-                            "status": "error",
-                            "filename": file.name,
-                            "filetype": file.type,
-                            "error": "Request timed out."
-                        })
-                    except Exception as e:
-                        results.append({
-                            "status": "error",
-                            "filename": file.name,
-                            "filetype": file.type,
-                            "error": str(e)
-                        })
-                    bar.progress((i + 1) / len(uploaded_files))
-                    time.sleep(0.1)
-
-                bar.empty()
-                status_txt.empty()
-                st.session_state["scan_results"] = results
-                st.session_state["scan_index"] = 0
-                st.rerun()
+                        except Exception as e:
+                            results.append({
+                                "status": "error",
+                                "filename": file.name,
+                                "filetype": file.type,
+                                "error": str(e)
+                            })
+                        bar.progress((i + 1) / len(uploaded_files))
+                        time.sleep(0.1)
+                    bar.empty()
+                    status_txt.empty()
+                    st.session_state["scan_results"] = results
+                    st.session_state["scan_index"] = 0
+                    st.rerun()
 
         if "scan_results" in st.session_state and st.session_state["scan_results"]:
             results = st.session_state["scan_results"]
@@ -685,7 +701,6 @@ def show_scan_page():
                 r["data"].get("expense_status") == "pending_verification"
             )
             approved = ok - pending
-
             st.markdown("---")
             st.markdown("#### Processing Summary")
             m1, m2 = st.columns(2)
@@ -695,273 +710,247 @@ def show_scan_page():
             with m2:
                 st.metric("Pending Review", pending)
                 st.metric("Total", len(results))
-
             st.markdown("#### Recent Uploads")
             for i, r in enumerate(results):
-                if r["status"] == "success":
-                    exp_status = r["data"].get("expense_status", "approved")
-                    icon = "✅" if exp_status == "approved" else "⚠️"
-                else:
-                    icon = "❌"
-
-                if st.button(
-                    f"{icon} {r['filename']}",
-                    key=f"file_select_{i}",
-                    use_container_width=True
-                ):
+                icon = "✅" if r["status"] == "success" and r["data"].get("expense_status") == "approved" else "⚠️" if r["status"] == "success" else "❌"
+                if st.button(f"{icon} {r['filename']}", key=f"file_select_{i}", use_container_width=True):
                     st.session_state["scan_index"] = i
                     st.rerun()
 
     with col_center:
         st.markdown("#### Document Viewer")
-
-        if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
-            st.markdown("""
-            <div style="border:2px dashed #D9CCE0;border-radius:16px;padding:60px 20px;
-                 text-align:center;background:#FBF8FC;margin-top:8px;">
-              <div style="font-size:48px;margin-bottom:12px;">📄</div>
-              <div style="font-size:14px;font-weight:600;color:#4B4458;margin-bottom:6px;">
-                No document selected
-              </div>
-              <div style="font-size:12px;color:#6D6578;">
-                Upload a receipt on the left to preview it here
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            results = st.session_state["scan_results"]
-            idx = st.session_state.get("scan_index", 0)
-            result = results[idx]
-
-            if len(results) > 1:
-                nav1, nav2, nav3 = st.columns([1, 2, 1])
-                with nav1:
-                    if st.button("Prev", disabled=idx == 0):
-                        st.session_state["scan_index"] = idx - 1
-                        st.rerun()
-                with nav2:
-                    st.markdown(
-                        f"<div style='text-align:center;font-size:12px;color:#6D6578;padding-top:8px;'>"
-                        f"Document {idx+1} of {len(results)}</div>",
-                        unsafe_allow_html=True
-                    )
-                with nav3:
-                    if st.button("Next", disabled=idx == len(results)-1):
-                        st.session_state["scan_index"] = idx + 1
-                        st.rerun()
-
-            st.markdown(f"**{result['filename']}**")
-
-            if result["status"] == "success":
-                data = result["data"]
-                extracted = data.get("extracted_data", {})
-                ocr = data.get("ocr", {})
-                expense_status = data.get("expense_status", "approved")
-
-                conf = ocr.get("confidence_score", 0)
-                conf_color = "#AA225B" if conf < 0.6 else "#8E40B0" if conf < 0.8 else "#2d6a4f"
-                st.markdown(f"""
-                <div style="margin-bottom:12px;">
-                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                    <span style="font-size:11px;font-weight:600;color:#6D6578;">OCR CONFIDENCE</span>
-                    <span style="font-size:11px;font-weight:700;color:{conf_color};">{conf:.0%}</span>
+        with st.container(border=True):
+            if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
+                st.markdown("""
+                <div style="padding:80px 20px;text-align:center;">
+                  <div style="font-size:48px;margin-bottom:12px;">📄</div>
+                  <div style="font-size:14px;font-weight:600;color:#4B4458;margin-bottom:6px;">
+                    No document selected
                   </div>
-                  <div style="background:#EAE2EE;border-radius:4px;height:6px;">
-                    <div style="width:{int(conf*100)}%;height:100%;background:{conf_color};border-radius:4px;"></div>
+                  <div style="font-size:12px;color:#6D6578;">
+                    Upload a receipt on the left to preview it here
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-                if expense_status == "approved":
-                    st.success("Approved — added to expenses")
-                else:
-                    st.warning("Pending Verification — awaiting review")
-
-                st.markdown(f"""
-                <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;padding:14px;margin-top:8px;">
-                  <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                       letter-spacing:.06em;margin-bottom:10px;">Document Metadata</div>
-                  <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                    <tr><td style="color:#6D6578;padding:3px 0;">File Type</td>
-                        <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('source','image').upper()}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Pages</td>
-                        <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('pages',1)}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Words Extracted</td>
-                        <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('word_count',0)}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Expense ID</td>
-                        <td style="font-weight:500;color:#1C1424;text-align:right;">#{data.get('expense_id')}</td></tr>
-                  </table>
-                </div>
-                """, unsafe_allow_html=True)
-
-                items = extracted.get("line_items", [])
-                if items:
-                    st.markdown("**Line Items**")
-                    import pandas as pd
-                    st.dataframe(
-                        pd.DataFrame(items),
-                        use_container_width=True,
-                        hide_index=True
-                    )
             else:
-                st.error(f"Failed: {result.get('error', 'Unknown error')}")
+                results = st.session_state["scan_results"]
+                idx = st.session_state.get("scan_index", 0)
+                result = results[idx]
+                if len(results) > 1:
+                    nav1, nav2, nav3 = st.columns([1, 2, 1])
+                    with nav1:
+                        if st.button("Prev", disabled=idx == 0):
+                            st.session_state["scan_index"] = idx - 1
+                            st.rerun()
+                    with nav2:
+                        st.markdown(
+                            f"<div style='text-align:center;font-size:12px;color:#6D6578;padding-top:8px;'>"
+                            f"Document {idx+1} of {len(results)}</div>",
+                            unsafe_allow_html=True
+                        )
+                    with nav3:
+                        if st.button("Next", disabled=idx == len(results)-1):
+                            st.session_state["scan_index"] = idx + 1
+                            st.rerun()
+                st.markdown(f"**{result['filename']}**")
+                if result["status"] == "success":
+                    data = result["data"]
+                    extracted = data.get("extracted_data", {})
+                    ocr = data.get("ocr", {})
+                    expense_status = data.get("expense_status", "approved")
+                    conf = ocr.get("confidence_score", 0)
+                    conf_color = "#AA225B" if conf < 0.6 else "#8E40B0" if conf < 0.8 else "#2d6a4f"
+                    st.markdown(f"""
+                    <div style="margin-bottom:12px;">
+                      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                        <span style="font-size:11px;font-weight:600;color:#6D6578;">OCR CONFIDENCE</span>
+                        <span style="font-size:11px;font-weight:700;color:{conf_color};">{conf:.0%}</span>
+                      </div>
+                      <div style="background:#EAE2EE;border-radius:4px;height:6px;">
+                        <div style="width:{int(conf*100)}%;height:100%;background:{conf_color};border-radius:4px;"></div>
+                      </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if expense_status == "approved":
+                        st.success("Approved — added to expenses")
+                    else:
+                        st.warning("Pending Verification — awaiting review")
+                    st.markdown(f"""
+                    <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
+                         padding:14px;margin-top:8px;">
+                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:10px;">Document Metadata</div>
+                      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                        <tr><td style="color:#6D6578;padding:3px 0;">File Type</td>
+                            <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('source','image').upper()}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Pages</td>
+                            <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('pages',1)}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Words Extracted</td>
+                            <td style="font-weight:500;color:#1C1424;text-align:right;">{ocr.get('word_count',0)}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Expense ID</td>
+                            <td style="font-weight:500;color:#1C1424;text-align:right;">#{data.get('expense_id')}</td></tr>
+                      </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    items = extracted.get("line_items", [])
+                    if items:
+                        st.markdown("**Line Items**")
+                        import pandas as pd
+                        st.dataframe(pd.DataFrame(items), use_container_width=True, hide_index=True)
+                else:
+                    st.error(f"Failed: {result.get('error', 'Unknown error')}")
 
     with col_right:
         st.markdown("#### AI Analysis")
-
-        if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
-            st.markdown("""
-            <div style="border:1px solid #EAE2EE;border-radius:12px;padding:40px 16px;
-                 text-align:center;background:#FBF8FC;margin-top:8px;">
-              <div style="font-size:36px;margin-bottom:10px;">🤖</div>
-              <div style="font-size:13px;font-weight:600;color:#4B4458;margin-bottom:4px;">
-                AI Ready
-              </div>
-              <div style="font-size:11px;color:#6D6578;">
-                Upload and scan a receipt to see AI extraction results
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            results = st.session_state["scan_results"]
-            idx = st.session_state.get("scan_index", 0)
-            result = results[idx]
-
-            if result["status"] == "success":
-                data = result["data"]
-                extracted = data.get("extracted_data", {})
-                classification = data.get("classification", {})
-                fraud = data.get("fraud_analysis", {})
-                risk = fraud.get("fraud_risk_score", 0) or 0
-
-                st.markdown(f"""
-                <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
-                     padding:14px;margin-bottom:10px;">
-                  <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                       letter-spacing:.06em;margin-bottom:8px;">Vendor Information</div>
-                  <div style="font-size:15px;font-weight:700;color:#1C1424;margin-bottom:2px;">
-                    {extracted.get('vendor_name','Unknown')}
+        with st.container(border=True):
+            if "scan_results" not in st.session_state or not st.session_state["scan_results"]:
+                st.markdown("""
+                <div style="padding:80px 16px;text-align:center;">
+                  <div style="font-size:36px;margin-bottom:10px;">🤖</div>
+                  <div style="font-size:13px;font-weight:600;color:#4B4458;margin-bottom:4px;">
+                    AI Ready
                   </div>
-                  <div style="font-size:11px;color:#6D6578;">{extracted.get('vendor_category_hint','—')}</div>
-                  {f'<div style="font-size:11px;color:#8E40B0;margin-top:4px;">GSTIN: {extracted.get("gstin")}</div>' if extracted.get('gstin') else ''}
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
-                     padding:14px;margin-bottom:10px;">
-                  <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                       letter-spacing:.06em;margin-bottom:8px;">Amount Breakdown</div>
-                  <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                    <tr><td style="color:#6D6578;padding:3px 0;">Subtotal</td>
-                        <td style="text-align:right;font-weight:500;">Rs {extracted.get('subtotal','—')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">{extracted.get('tax_type','Tax')}</td>
-                        <td style="text-align:right;font-weight:500;">Rs {extracted.get('tax_amount','—')}</td></tr>
-                    <tr style="border-top:1px solid #EAE2EE;">
-                      <td style="font-weight:700;color:#1C1424;padding-top:6px;">Total</td>
-                      <td style="text-align:right;font-weight:700;color:#AA225B;font-size:14px;padding-top:6px;">
-                        Rs {extracted.get('total_amount',0):,.2f}
-                      </td>
-                    </tr>
-                  </table>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
-                     padding:14px;margin-bottom:10px;">
-                  <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                       letter-spacing:.06em;margin-bottom:8px;">Invoice Details</div>
-                  <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                    <tr><td style="color:#6D6578;padding:3px 0;">Date</td>
-                        <td style="text-align:right;font-weight:500;">{extracted.get('transaction_date','—')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Receipt No</td>
-                        <td style="text-align:right;font-weight:500;">{extracted.get('receipt_number','—')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Payment</td>
-                        <td style="text-align:right;font-weight:500;">{extracted.get('payment_method','—')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Currency</td>
-                        <td style="text-align:right;font-weight:500;">{extracted.get('currency_code','INR')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Category</td>
-                        <td style="text-align:right;font-weight:500;">{classification.get('primary_category','—')}</td></tr>
-                    <tr><td style="color:#6D6578;padding:3px 0;">Subcategory</td>
-                        <td style="text-align:right;font-weight:500;">{classification.get('subcategory','—')}</td></tr>
-                  </table>
-                </div>
-                """, unsafe_allow_html=True)
-
-                risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
-                risk_label = "HIGH RISK" if risk >= 0.5 else "MEDIUM" if risk >= 0.3 else "LOW RISK"
-                risk_bg = "#fff5f5" if risk >= 0.5 else "#fffbf0" if risk >= 0.3 else "#f5edfb"
-
-                flags = fraud.get("fraud_flags", [])
-                flags_html = "".join(
-                    f'<div style="font-size:11px;color:#AA225B;padding:2px 0;">• {f}</div>'
-                    for f in flags
-                ) if flags else '<div style="font-size:11px;color:#6D6578;">No flags detected</div>'
-
-                dup = fraud.get("is_duplicate", False)
-                near_dup = fraud.get("is_near_duplicate", False)
-                if dup:
-                    dup_html = (
-                        f'<div style="font-size:11px;color:#EC105C;font-weight:600;margin-top:4px;">'
-                        f'DUPLICATE — matches Expense #{fraud.get("duplicate_match_id")}</div>'
-                    )
-                elif near_dup:
-                    dup_html = (
-                        '<div style="font-size:11px;color:#c2410c;font-weight:600;margin-top:4px;">'
-                        'POSSIBLE DUPLICATE — similar bill found</div>'
-                    )
-                else:
-                    dup_html = '<div style="font-size:11px;color:#8E40B0;margin-top:4px;">No duplicate found</div>'
-
-                st.markdown(f"""
-                <div style="background:{risk_bg};border:1px solid #EAE2EE;border-radius:12px;
-                     padding:14px;margin-bottom:10px;">
-                  <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                       letter-spacing:.06em;margin-bottom:8px;">Fraud & Risk Assessment</div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="font-size:12px;font-weight:600;color:{risk_color};">Risk Score</span>
-                    <span style="font-size:14px;font-weight:700;color:{risk_color};">{risk:.2f} — {risk_label}</span>
+                  <div style="font-size:11px;color:#6D6578;">
+                    Upload and scan a receipt to see AI extraction results
                   </div>
-                  <div style="background:#EAE2EE;border-radius:4px;height:6px;margin-bottom:10px;">
-                    <div style="width:{int(risk*100)}%;height:100%;background:{risk_color};border-radius:4px;"></div>
-                  </div>
-                  <div style="font-size:11px;font-weight:600;color:#6D6578;margin-bottom:4px;">Fraud Flags</div>
-                  {flags_html}
-                  <div style="font-size:11px;font-weight:600;color:#6D6578;margin-top:8px;margin-bottom:2px;">Duplicate Check</div>
-                  {dup_html}
                 </div>
                 """, unsafe_allow_html=True)
-
-                expense_status = data.get("expense_status", "approved")
-                if expense_status == "pending_verification":
-                    expense_id = data.get("expense_id")
-                    st.markdown("**Review Action Required**")
-                    ba, br = st.columns(2)
-                    with ba:
-                        if st.button("Approve", key=f"scan_app_{expense_id}",
-                                     use_container_width=True, type="primary"):
-                            r = requests.put(
-                                f"{BACKEND_URL}/expenses/{expense_id}/approve",
-                                headers=get_headers()
-                            )
-                            if r.status_code == 200:
-                                st.success("Approved!")
-                                st.rerun()
-                    with br:
-                        if st.button("Reject", key=f"scan_rej_{expense_id}",
-                                     use_container_width=True):
-                            r = requests.put(
-                                f"{BACKEND_URL}/expenses/{expense_id}/reject",
-                                headers=get_headers()
-                            )
-                            if r.status_code == 200:
-                                st.success("Rejected")
-                                st.rerun()
             else:
-                st.error(f"Processing failed: {result.get('error','Unknown error')}")
+                results = st.session_state["scan_results"]
+                idx = st.session_state.get("scan_index", 0)
+                result = results[idx]
+                if result["status"] == "success":
+                    data = result["data"]
+                    extracted = data.get("extracted_data", {})
+                    classification = data.get("classification", {})
+                    fraud = data.get("fraud_analysis", {})
+                    risk = fraud.get("fraud_risk_score", 0) or 0
 
+                    st.markdown(f"""
+                    <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
+                         padding:14px;margin-bottom:10px;">
+                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:8px;">Vendor Information</div>
+                      <div style="font-size:15px;font-weight:700;color:#1C1424;margin-bottom:2px;">
+                        {extracted.get('vendor_name','Unknown')}
+                      </div>
+                      <div style="font-size:11px;color:#6D6578;">{extracted.get('vendor_category_hint','—')}</div>
+                      {f'<div style="font-size:11px;color:#8E40B0;margin-top:4px;">GSTIN: {extracted.get("gstin")}</div>' if extracted.get('gstin') else ''}
+                    </div>
+                    """, unsafe_allow_html=True)
 
+                    st.markdown(f"""
+                    <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
+                         padding:14px;margin-bottom:10px;">
+                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:8px;">Amount Breakdown</div>
+                      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                        <tr><td style="color:#6D6578;padding:3px 0;">Subtotal</td>
+                            <td style="text-align:right;font-weight:500;">Rs {extracted.get('subtotal','—')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">{extracted.get('tax_type','Tax')}</td>
+                            <td style="text-align:right;font-weight:500;">Rs {extracted.get('tax_amount','—')}</td></tr>
+                        <tr style="border-top:1px solid #EAE2EE;">
+                          <td style="font-weight:700;color:#1C1424;padding-top:6px;">Total</td>
+                          <td style="text-align:right;font-weight:700;color:#AA225B;font-size:14px;padding-top:6px;">
+                            Rs {extracted.get('total_amount',0):,.2f}
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                    <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
+                         padding:14px;margin-bottom:10px;">
+                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:8px;">Invoice Details</div>
+                      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                        <tr><td style="color:#6D6578;padding:3px 0;">Date</td>
+                            <td style="text-align:right;font-weight:500;">{extracted.get('transaction_date','—')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Receipt No</td>
+                            <td style="text-align:right;font-weight:500;">{extracted.get('receipt_number','—')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Payment</td>
+                            <td style="text-align:right;font-weight:500;">{extracted.get('payment_method','—')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Currency</td>
+                            <td style="text-align:right;font-weight:500;">{extracted.get('currency_code','INR')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Category</td>
+                            <td style="text-align:right;font-weight:500;">{classification.get('primary_category','—')}</td></tr>
+                        <tr><td style="color:#6D6578;padding:3px 0;">Subcategory</td>
+                            <td style="text-align:right;font-weight:500;">{classification.get('subcategory','—')}</td></tr>
+                      </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
+                    risk_label = "HIGH RISK" if risk >= 0.5 else "MEDIUM" if risk >= 0.3 else "LOW RISK"
+                    risk_bg = "#fff5f5" if risk >= 0.5 else "#fffbf0" if risk >= 0.3 else "#f5edfb"
+                    flags = fraud.get("fraud_flags", [])
+                    flags_html = "".join(
+                        f'<div style="font-size:11px;color:#AA225B;padding:2px 0;">• {f}</div>'
+                        for f in flags
+                    ) if flags else '<div style="font-size:11px;color:#6D6578;">No flags detected</div>'
+                    dup = fraud.get("is_duplicate", False)
+                    near_dup = fraud.get("is_near_duplicate", False)
+                    if dup:
+                        dup_html = (
+                            f'<div style="font-size:11px;color:#EC105C;font-weight:600;margin-top:4px;">'
+                            f'DUPLICATE — matches Expense #{fraud.get("duplicate_match_id")}</div>'
+                        )
+                    elif near_dup:
+                        dup_html = (
+                            '<div style="font-size:11px;color:#c2410c;font-weight:600;margin-top:4px;">'
+                            'POSSIBLE DUPLICATE — similar bill found</div>'
+                        )
+                    else:
+                        dup_html = '<div style="font-size:11px;color:#8E40B0;margin-top:4px;">No duplicate found</div>'
+
+                    st.markdown(f"""
+                    <div style="background:{risk_bg};border:1px solid #EAE2EE;border-radius:12px;
+                         padding:14px;margin-bottom:10px;">
+                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
+                           letter-spacing:.06em;margin-bottom:8px;">Fraud & Risk Assessment</div>
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <span style="font-size:12px;font-weight:600;color:{risk_color};">Risk Score</span>
+                        <span style="font-size:14px;font-weight:700;color:{risk_color};">{risk:.2f} — {risk_label}</span>
+                      </div>
+                      <div style="background:#EAE2EE;border-radius:4px;height:6px;margin-bottom:10px;">
+                        <div style="width:{int(risk*100)}%;height:100%;background:{risk_color};border-radius:4px;"></div>
+                      </div>
+                      <div style="font-size:11px;font-weight:600;color:#6D6578;margin-bottom:4px;">Fraud Flags</div>
+                      {flags_html}
+                      <div style="font-size:11px;font-weight:600;color:#6D6578;margin-top:8px;margin-bottom:2px;">Duplicate Check</div>
+                      {dup_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    expense_status = data.get("expense_status", "approved")
+                    if expense_status == "pending_verification":
+                        expense_id = data.get("expense_id")
+                        st.markdown("**Review Action Required**")
+                        ba, br = st.columns(2)
+                        with ba:
+                            if st.button("Approve", key=f"scan_app_{expense_id}",
+                                         use_container_width=True, type="primary"):
+                                r = requests.put(
+                                    f"{BACKEND_URL}/expenses/{expense_id}/approve",
+                                    headers=get_headers()
+                                )
+                                if r.status_code == 200:
+                                    st.success("Approved!")
+                                    st.rerun()
+                        with br:
+                            if st.button("Reject", key=f"scan_rej_{expense_id}",
+                                         use_container_width=True):
+                                r = requests.put(
+                                    f"{BACKEND_URL}/expenses/{expense_id}/reject",
+                                    headers=get_headers()
+                                )
+                                if r.status_code == 200:
+                                    st.success("Rejected")
+                                    st.rerun()
+                else:
+                    st.error(f"Processing failed: {result.get('error','Unknown error')}")
+                
 def show_expenses_page():
     import pandas as pd
 
