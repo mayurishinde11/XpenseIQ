@@ -109,4 +109,4 @@ from database import Base
 #     # fills this with the current timestamp when a new row is inserted
 #     # You never need to set this manually
 #     created_at = Column(DateTime(timezone=True), server_default=func.now())
- 
+owner_email = Column(String, nullable=True)

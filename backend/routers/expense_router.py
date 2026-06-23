@@ -729,13 +729,14 @@ def get_all_expenses(
 
 @router.put("/{expense_id}/approve")
 def approve_expense(
-    expense_id:   int,
-    db:           Session = Depends(get_db),
-    current_user          = Depends(get_current_user),
+    expense_id: int,
+    owner_email: str = None,
+    rejection_reason: str = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """Move a pending expense to approved."""
     expense = db.query(Expense).filter(
-        Expense.id      == expense_id,
+        Expense.id == expense_id,
         Expense.user_id == current_user.id,
     ).first()
 
@@ -744,27 +745,50 @@ def approve_expense(
     if expense.status == "approved":
         raise HTTPException(status_code=400, detail="Expense is already approved.")
 
+    # Save email if provided
+    if owner_email and not expense.owner_email:
+        expense.owner_email = owner_email
+
     expense.status = "approved"
     db.commit()
     db.refresh(expense)
 
+    # Send email
+    email_to = expense.owner_email
+    email_sent = False
+    if email_to:
+        from services.email_service import send_verification_email
+        result = send_verification_email(
+            to_email=email_to,
+            expense_id=expense.id,
+            vendor_name=expense.vendor_name,
+            total_amount=expense.total_amount or 0,
+            status="approved",
+            verifier_name=current_user.email,
+            transaction_date=expense.transaction_date,
+        )
+        email_sent = result.get("success", False)
+
     return {
-        "status":     "success",
-        "message":    f"Expense {expense_id} approved.",
+        "status": "success",
+        "message": f"Expense {expense_id} approved.",
         "expense_id": expense_id,
         "new_status": "approved",
+        "email_sent": email_sent,
+        "email_required": not email_to,
     }
 
 
 @router.put("/{expense_id}/reject")
 def reject_expense(
-    expense_id:   int,
-    db:           Session = Depends(get_db),
-    current_user          = Depends(get_current_user),
+    expense_id: int,
+    owner_email: str = None,
+    rejection_reason: str = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """Move an expense to rejected/archived."""
     expense = db.query(Expense).filter(
-        Expense.id      == expense_id,
+        Expense.id == expense_id,
         Expense.user_id == current_user.id,
     ).first()
 
@@ -773,17 +797,39 @@ def reject_expense(
     if expense.status == "rejected":
         raise HTTPException(status_code=400, detail="Expense is already rejected.")
 
+    # Save email if provided
+    if owner_email and not expense.owner_email:
+        expense.owner_email = owner_email
+
     expense.status = "rejected"
     db.commit()
     db.refresh(expense)
 
+    # Send email
+    email_to = expense.owner_email
+    email_sent = False
+    if email_to:
+        from services.email_service import send_verification_email
+        result = send_verification_email(
+            to_email=email_to,
+            expense_id=expense.id,
+            vendor_name=expense.vendor_name,
+            total_amount=expense.total_amount or 0,
+            status="rejected",
+            verifier_name=current_user.email,
+            rejection_reason=rejection_reason,
+            transaction_date=expense.transaction_date,
+        )
+        email_sent = result.get("success", False)
+
     return {
-        "status":     "success",
-        "message":    f"Expense {expense_id} rejected and archived.",
+        "status": "success",
+        "message": f"Expense {expense_id} rejected.",
         "expense_id": expense_id,
         "new_status": "rejected",
+        "email_sent": email_sent,
+        "email_required": not email_to,
     }
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GET SINGLE EXPENSE
