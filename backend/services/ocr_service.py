@@ -7,7 +7,7 @@ def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
     import numpy as np
 
     # Check 1 — File must not be empty
-    if len(file_bytes) < 5000:
+    if len(file_bytes) < 500:
         return {
             "is_valid": False,
             "reason": "File is too small or empty. Please upload a valid receipt image."
@@ -38,7 +38,7 @@ def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
 
     # Check 3 — PDF must have readable content
     if content_type == "application/pdf":
-        if len(file_bytes) < 10000:
+        if len(file_bytes) < 1000:
             return {
                 "is_valid": False,
                 "reason": "PDF file appears to be empty or corrupted."
