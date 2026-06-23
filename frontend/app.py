@@ -1262,14 +1262,23 @@ def show_pending_page():
 
             with col3:
                 confirm_key = f"confirm_{expense_id}"
+                vendor_email_key = f"vendor_email_{expense_id}"
                 state = st.session_state.get(confirm_key)
+
+                vendor_email_input = st.text_input(
+                    "Vendor Email (optional)",
+                    placeholder="vendor@email.com",
+                    key=vendor_email_key,
+                    label_visibility="collapsed"
+                )
 
                 if state == "approve":
                     st.warning("Confirm approval?")
                     if st.button("✅ Yes, Approve", key=f"yes_app_{expense_id}", use_container_width=True):
                         r = requests.put(
                             f"{BACKEND_URL}/expenses/{expense_id}/approve",
-                            headers=get_headers()
+                            headers=get_headers(),
+                            params={"vendor_email": vendor_email_input}
                         )
                         del st.session_state[confirm_key]
                         if r.status_code == 200:
@@ -1287,7 +1296,8 @@ def show_pending_page():
                     if st.button("❌ Yes, Reject", key=f"yes_rej_{expense_id}", use_container_width=True):
                         r = requests.put(
                             f"{BACKEND_URL}/expenses/{expense_id}/reject",
-                            headers=get_headers()
+                            headers=get_headers(),
+                            params={"vendor_email": vendor_email_input}
                         )
                         del st.session_state[confirm_key]
                         if r.status_code == 200:

@@ -720,7 +720,97 @@ def get_all_expenses(
         ],
     }
 
+#.......................................................................................................................
 
+def _send_expense_email(expense, action: str, vendor_email: str, current_user_email: str):
+    """Send approval or rejection email to vendor."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    import os
+
+    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER = os.getenv("SMTP_USER", "")
+    SMTP_PASS = os.getenv("SMTP_PASS", "")
+    ALERT_TO  = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
+
+    if not SMTP_USER or not SMTP_PASS:
+        return  # SMTP not configured, skip silently
+
+    vendor_name = expense.vendor_name or "Vendor"
+    amount      = expense.total_amount or 0
+    date        = expense.transaction_date or "—"
+    flags       = expense.fraud_flags or []
+    flags_text  = "\n".join(f"• {f}" for f in flags) if flags else "• No flags detected"
+
+    if action == "approved":
+        subject = f"[XpenseIQ] Expense Bill APPROVED — {vendor_name} Rs {amount:,.0f}"
+        body = f"""
+Dear {vendor_name},
+
+Great news! Your expense bill has been APPROVED by our finance team.
+
+Bill Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Vendor Name   : {vendor_name}
+Amount        : Rs {amount:,.2f}
+Date          : {date}
+Expense ID    : #{expense.id}
+Category      : {expense.primary_category or '—'}
+Payment       : {expense.payment_method or '—'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Status        : ✅ APPROVED
+
+This expense has been added to your approved records.
+Reimbursement will be processed as per company policy.
+
+Regards,
+XpenseIQ Finance Team
+        """
+    else:
+        subject = f"[XpenseIQ] Expense Bill REJECTED — {vendor_name} Rs {amount:,.0f}"
+        body = f"""
+Dear {vendor_name},
+
+We regret to inform you that your expense bill has been REJECTED by our finance team.
+
+Bill Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Vendor Name   : {vendor_name}
+Amount        : Rs {amount:,.2f}
+Date          : {date}
+Expense ID    : #{expense.id}
+Category      : {expense.primary_category or '—'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Status        : ❌ REJECTED
+
+Fraud / Risk Flags Detected:
+{flags_text}
+
+If you believe this is an error, please contact our finance team
+with Expense ID #{expense.id}.
+
+Regards,
+XpenseIQ Finance Team
+        """
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"]    = SMTP_USER
+        msg["To"]      = ALERT_TO
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, ALERT_TO, msg.as_string())
+    except Exception:
+        pass  # Don't fail the approve/reject if email fails
+    
 # ═══════════════════════════════════════════════════════════════════════════════
 # APPROVE / REJECT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -730,8 +820,9 @@ def approve_expense(
     expense_id:   int,
     db:           Session = Depends(get_db),
     current_user          = Depends(get_current_user),
+    vendor_email: str = "",
 ):
-    """Move a pending expense to approved."""
+    """Move a pending expense to approved and send email alert."""
     expense = db.query(Expense).filter(
         Expense.id      == expense_id,
         Expense.user_id == current_user.id,
@@ -746,6 +837,14 @@ def approve_expense(
     db.commit()
     db.refresh(expense)
 
+    # Send approval email
+    _send_expense_email(
+        expense=expense,
+        action="approved",
+        vendor_email=vendor_email,
+        current_user_email=current_user.email,
+    )
+
     return {
         "status":     "success",
         "message":    f"Expense {expense_id} approved.",
@@ -759,8 +858,9 @@ def reject_expense(
     expense_id:   int,
     db:           Session = Depends(get_db),
     current_user          = Depends(get_current_user),
+    vendor_email: str = "",
 ):
-    """Move an expense to rejected/archived."""
+    """Move an expense to rejected/archived and send email alert."""
     expense = db.query(Expense).filter(
         Expense.id      == expense_id,
         Expense.user_id == current_user.id,
@@ -774,6 +874,14 @@ def reject_expense(
     expense.status = "rejected"
     db.commit()
     db.refresh(expense)
+
+    # Send rejection email
+    _send_expense_email(
+        expense=expense,
+        action="rejected",
+        vendor_email=vendor_email,
+        current_user_email=current_user.email,
+    )
 
     return {
         "status":     "success",
