@@ -1324,8 +1324,46 @@ def show_rejected_page():
             st.info("No rejected expenses.")
             return
 
-        st.error(f"{len(expenses)} rejected expense(s) archived.")
+        total_rejected = len(expenses)
+        total_blocked  = sum(e.get("total_amount", 0) or 0 for e in expenses)
+        avg_risk = sum(e.get("fraud_risk_score", 0) or 0 for e in expenses) / total_rejected
 
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#EF4444;flex-shrink:0;"></div>
+                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Total Rejected</div>
+              </div>
+              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">{total_rejected}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with k2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#F59E0B;flex-shrink:0;"></div>
+                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Amount Blocked</div>
+              </div>
+              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">Rs {total_blocked:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with k3:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#22C55E;flex-shrink:0;"></div>
+                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Avg Risk Score</div>
+              </div>
+              <div style="font-size:32px;font-weight:800;color:#EC105C;line-height:1;">{avg_risk:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         rows_html = ""
         for expense in expenses:
             vendor = expense.get("vendor_name", "—") or "—"
