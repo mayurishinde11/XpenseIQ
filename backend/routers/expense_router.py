@@ -804,13 +804,14 @@ XpenseIQ Finance Team
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
+        import ssl
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, 465, context=context) as server:
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, ALERT_TO, msg.as_string())
     except Exception:
         pass  # Don't fail the approve/reject if email fails
-    
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # APPROVE / REJECT
 # ═══════════════════════════════════════════════════════════════════════════════
