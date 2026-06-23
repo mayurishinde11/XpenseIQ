@@ -7,3 +7,5 @@ backgroundColor = "#0e0e0e"
 secondaryBackgroundColor = "#1a1a1a"
 textColor = "#ffffff"
 font = "sans serif"
+[theme]
+base = "light"
