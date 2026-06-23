@@ -735,7 +735,7 @@ def _send_expense_email(expense, action: str, vendor_email: str, current_user_em
     SMTP_PASS = os.getenv("SMTP_PASS", "")
     ALERT_TO  = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
     print(f"EMAIL DEBUG: host={SMTP_HOST} port={SMTP_PORT} user={SMTP_USER} pass_len={len(SMTP_PASS)} to={ALERT_TO}")
-    
+
     if not SMTP_USER or not SMTP_PASS:
         return  # SMTP not configured, skip silently
 
@@ -809,8 +809,10 @@ XpenseIQ Finance Team
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, ALERT_TO, msg.as_string())
-    except Exception:
-        pass  # Don't fail the approve/reject if email fails
+    except Exception as e:
+        import traceback
+        print(f"EMAIL ERROR: {str(e)}")
+        print(traceback.format_exc())
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # APPROVE / REJECT
