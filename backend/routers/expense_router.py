@@ -720,166 +720,6 @@ def get_all_expenses(
         ],
     }
 
-#.......................................................................................................................
-
-def _send_expense_email(expense, action: str, vendor_email: str, current_user_email: str):
-    """Send approval or rejection email via Brevo HTTP API."""
-    import os
-    import requests as http_requests
-
-    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-    ALERT_TO = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
-
-    if not BREVO_API_KEY:
-        print("EMAIL SKIP: BREVO_API_KEY not configured")
-        return
-
-    vendor_name = expense.vendor_name or "Vendor"
-    amount      = expense.total_amount or 0
-    date        = expense.transaction_date or "—"
-    flags       = expense.fraud_flags or []
-    flags_text  = "<br>".join(f"• {f}" for f in flags) if flags else "• No flags detected"
-
-    if action == "approved":
-        subject = f"[XpenseIQ] Expense Bill APPROVED — {vendor_name} Rs {amount:,.0f}"
-        html = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <div style="background:#22C55E;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-            <h1 style="color:white;margin:0;">✅ Expense APPROVED</h1>
-          </div>
-          <div style="background:#F0FFF4;padding:20px;border-radius:0 0 12px 12px;border:1px solid #22C55E;">
-            <p>Dear <strong>{vendor_name}</strong>,</p>
-            <p>Your expense bill has been <strong style="color:#22C55E;">APPROVED</strong> by our finance team.</p>
-            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-              <tr style="background:#ECFDF5;"><td style="padding:8px;font-weight:bold;">Vendor</td><td style="padding:8px;">{vendor_name}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold;">Amount</td><td style="padding:8px;color:#22C55E;font-weight:bold;">Rs {amount:,.2f}</td></tr>
-              <tr style="background:#ECFDF5;"><td style="padding:8px;font-weight:bold;">Date</td><td style="padding:8px;">{date}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold;">Expense ID</td><td style="padding:8px;">#{expense.id}</td></tr>
-              <tr style="background:#ECFDF5;"><td style="padding:8px;font-weight:bold;">Category</td><td style="padding:8px;">{expense.primary_category or '—'}</td></tr>
-            </table>
-            <p>Reimbursement will be processed as per company policy.</p>
-            <p style="color:#6D6578;font-size:12px;">— XpenseIQ Finance Team</p>
-          </div>
-        </div>
-        """
-    else:
-        subject = f"[XpenseIQ] Expense Bill REJECTED — {vendor_name} Rs {amount:,.0f}"
-        html = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <div style="background:#EF4444;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-            <h1 style="color:white;margin:0;">❌ Expense REJECTED</h1>
-          </div>
-          <div style="background:#FFF5F5;padding:20px;border-radius:0 0 12px 12px;border:1px solid #EF4444;">
-            <p>Dear <strong>{vendor_name}</strong>,</p>
-            <p>Your expense bill has been <strong style="color:#EF4444;">REJECTED</strong> by our finance team.</p>
-            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-              <tr style="background:#FEE2E2;"><td style="padding:8px;font-weight:bold;">Vendor</td><td style="padding:8px;">{vendor_name}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold;">Amount</td><td style="padding:8px;color:#EF4444;font-weight:bold;">Rs {amount:,.2f}</td></tr>
-              <tr style="background:#FEE2E2;"><td style="padding:8px;font-weight:bold;">Date</td><td style="padding:8px;">{date}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold;">Expense ID</td><td style="padding:8px;">#{expense.id}</td></tr>
-            </table>
-            <p><strong>Fraud Flags:</strong><br>{flags_text}</p>
-            <p>Please contact our finance team with Expense ID #{expense.id} if you have questions.</p>
-            <p style="color:#6D6578;font-size:12px;">— XpenseIQ Finance Team</p>
-          </div>
-        </div>
-        """
-
-    try:
-        response = http_requests.post(
-            "https://api.brevo.com/v3/smtp/email",
-            headers={
-                "api-key": BREVO_API_KEY,
-                "Content-Type": "application/json"
-            },
-            json={
-                "sender": {"name": "XpenseIQ", "email": current_user_email},
-                "to": [{"email": ALERT_TO}],
-                "subject": subject,
-                "htmlContent": html
-            }
-        )
-        print(f"EMAIL SENT: status={response.status_code} to={ALERT_TO}")
-        if response.status_code not in [200, 201]:
-            print(f"EMAIL FAILED: {response.text}")
-    except Exception as e:
-        import traceback
-        print(f"EMAIL ERROR: {str(e)}")
-        print(traceback.format_exc())
-    vendor_name = expense.vendor_name or "Vendor"
-    amount      = expense.total_amount or 0
-    date        = expense.transaction_date or "—"
-    flags       = expense.fraud_flags or []
-    flags_text  = "\n".join(f"• {f}" for f in flags) if flags else "• No flags detected"
-
-    if action == "approved":
-        subject = f"[XpenseIQ] Expense Bill APPROVED — {vendor_name} Rs {amount:,.0f}"
-        body = f"""
-Dear {vendor_name},
-
-Great news! Your expense bill has been APPROVED by our finance team.
-
-Bill Details:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Vendor Name   : {vendor_name}
-Amount        : Rs {amount:,.2f}
-Date          : {date}
-Expense ID    : #{expense.id}
-Category      : {expense.primary_category or '—'}
-Payment       : {expense.payment_method or '—'}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Status        : ✅ APPROVED
-
-This expense has been added to your approved records.
-Reimbursement will be processed as per company policy.
-
-Regards,
-XpenseIQ Finance Team
-        """
-    else:
-        subject = f"[XpenseIQ] Expense Bill REJECTED — {vendor_name} Rs {amount:,.0f}"
-        body = f"""
-Dear {vendor_name},
-
-We regret to inform you that your expense bill has been REJECTED by our finance team.
-
-Bill Details:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Vendor Name   : {vendor_name}
-Amount        : Rs {amount:,.2f}
-Date          : {date}
-Expense ID    : #{expense.id}
-Category      : {expense.primary_category or '—'}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Status        : ❌ REJECTED
-
-Fraud / Risk Flags Detected:
-{flags_text}
-
-If you believe this is an error, please contact our finance team
-with Expense ID #{expense.id}.
-
-Regards,
-XpenseIQ Finance Team
-        """
-
-    try:
-        msg = MIMEMultipart()
-        msg["From"]    = SMTP_USER
-        msg["To"]      = ALERT_TO
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, ALERT_TO, msg.as_string())
-    except Exception as e:
-        import traceback
-        print(f"EMAIL ERROR: {str(e)}")
-        print(traceback.format_exc())
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # APPROVE / REJECT
@@ -890,9 +730,8 @@ def approve_expense(
     expense_id:   int,
     db:           Session = Depends(get_db),
     current_user          = Depends(get_current_user),
-    vendor_email: str = "",
 ):
-    """Move a pending expense to approved and send email alert."""
+    """Move a pending expense to approved."""
     expense = db.query(Expense).filter(
         Expense.id      == expense_id,
         Expense.user_id == current_user.id,
@@ -907,14 +746,6 @@ def approve_expense(
     db.commit()
     db.refresh(expense)
 
-    # Send approval email
-    _send_expense_email(
-        expense=expense,
-        action="approved",
-        vendor_email=vendor_email,
-        current_user_email=current_user.email,
-    )
-
     return {
         "status":     "success",
         "message":    f"Expense {expense_id} approved.",
@@ -928,9 +759,8 @@ def reject_expense(
     expense_id:   int,
     db:           Session = Depends(get_db),
     current_user          = Depends(get_current_user),
-    vendor_email: str = "",
 ):
-    """Move an expense to rejected/archived and send email alert."""
+    """Move an expense to rejected/archived."""
     expense = db.query(Expense).filter(
         Expense.id      == expense_id,
         Expense.user_id == current_user.id,
@@ -944,14 +774,6 @@ def reject_expense(
     expense.status = "rejected"
     db.commit()
     db.refresh(expense)
-
-    # Send rejection email
-    _send_expense_email(
-        expense=expense,
-        action="rejected",
-        vendor_email=vendor_email,
-        current_user_email=current_user.email,
-    )
 
     return {
         "status":     "success",
