@@ -734,7 +734,8 @@ def _send_expense_email(expense, action: str, vendor_email: str, current_user_em
     SMTP_USER = os.getenv("SMTP_USER", "")
     SMTP_PASS = os.getenv("SMTP_PASS", "")
     ALERT_TO  = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
-
+    print(f"EMAIL DEBUG: host={SMTP_HOST} port={SMTP_PORT} user={SMTP_USER} pass_len={len(SMTP_PASS)} to={ALERT_TO}")
+    
     if not SMTP_USER or not SMTP_PASS:
         return  # SMTP not configured, skip silently
 
