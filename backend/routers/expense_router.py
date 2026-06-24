@@ -156,20 +156,11 @@ def run_full_pipeline(
 
     extracted_data = ai_result["data"]
 
-    # Stage 4 — Receipt Validity
-    total_amount = extracted_data.get("total_amount")
-    vendor_name  = extracted_data.get("vendor_name")
-
-    if not total_amount and not vendor_name:
-        return {
-            "success": False,
-            "error": "File does not appear to be a receipt/bill. No financial data found.",
-        }
-    if not total_amount:
-        return {
-            "success": False,
-            "error": "Could not extract total amount. Please upload a clearer receipt.",
-        }
+    # Stage 4 — Receipt Validity (lenient — use defaults)
+    total_amount = extracted_data.get("total_amount") or 0.0
+    vendor_name  = extracted_data.get("vendor_name") or "Unknown Vendor"
+    extracted_data["total_amount"] = total_amount
+    extracted_data["vendor_name"]  = vendor_name
 
     # Stage 5 — AI Classification
     classification_result = classify_expense(
