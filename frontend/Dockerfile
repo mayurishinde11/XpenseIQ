@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt && pip install openpyxl
 COPY . .
 EXPOSE 8501
 ENV STREAMLIT_SERVER_HEADLESS=true
