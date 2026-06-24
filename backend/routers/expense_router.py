@@ -178,10 +178,16 @@ def run_full_pipeline(
                        "cash", "upi", "card", "paid", "balance due"]
     has_receipt_word = any(kw in ocr_text for kw in receipt_keywords)
 
-    if not (has_amount or has_receipt_word):
+    if not has_receipt_word and not total_amount:
         return {
             "success": False,
             "error": "File does not appear to be a receipt or invoice. Please upload a valid bill.",
+        }
+
+    if not total_amount and not has_amount:
+        return {
+            "success": False,
+            "error": "Could not find any amount in this file. Please upload a valid receipt.",
         }
 
     total_amount = total_amount or 0.0
