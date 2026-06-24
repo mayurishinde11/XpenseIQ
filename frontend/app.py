@@ -171,6 +171,7 @@ def show_main_app():
     page_map.get(st.session_state.page, show_dashboard)()
 
 def show_dashboard():
+    st.cache_data.clear()
     import pandas as pd
 
     st.markdown(
@@ -933,6 +934,7 @@ def show_scan_page():
                     """, unsafe_allow_html=True)
     
 def show_expenses_page():
+    st.cache_data.clear()
     import pandas as pd
     st.title("My Expenses")
     st.caption("Showing approved expenses only.")
@@ -1158,6 +1160,7 @@ def show_expenses_page():
 
 
 def show_pending_page():
+    st.cache_data.clear()
     st.title("Pending Verification")
     st.caption("Flagged expenses awaiting review. These are NOT counted in totals.")
 
@@ -1353,6 +1356,7 @@ def show_pending_page():
                         st.rerun()
 
 def show_rejected_page():
+    st.cache_data.clear()
     import pandas as pd
     st.title("Rejected Expenses")
     st.caption("Archived expenses excluded from all calculations.")
