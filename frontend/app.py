@@ -1148,10 +1148,27 @@ def show_expenses_page():
             </div>
             """, unsafe_allow_html=True)
 
+            import io as _io
+            import openpyxl
+
+            # CSV download
             csv = df_all.to_csv(index=False)
             st.download_button(
-                "⬇ Download as CSV", data=csv,
-                file_name="expenses.csv", mime="text/csv"
+                "⬇ Download as CSV",
+                data=csv,
+                file_name="expenses.csv",
+                mime="text/csv"
+            )
+
+            # Excel download
+            excel_buf = _io.BytesIO()
+            df_all.to_excel(excel_buf, index=False, sheet_name="Expenses")
+            excel_buf.seek(0)
+            st.download_button(
+                "⬇ Download as Excel",
+                data=excel_buf.getvalue(),
+                file_name="expenses.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
             st.info("No expenses found.")
