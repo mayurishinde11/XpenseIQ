@@ -667,14 +667,11 @@ def show_scan_page():
                     for i, file in enumerate(uploaded_files):
                         status_txt.write(f"Processing {file.name} ({i+1}/{len(uploaded_files)})...")
                         try:
+                            detected_type = file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream"
                             r = requests.post(
                                 f"{BACKEND_URL}/expenses/scan-receipt",
                                 headers=get_headers(),
-                                # Detect content type reliably
-                                
-
-                                detected_type = file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream"
-                                files={"file": (file.name, file.getvalue(), file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream")},
+                                files={"file": (file.name, file.getvalue(), detected_type)},
                                 timeout=60
                             )
                             if r.status_code == 200:
