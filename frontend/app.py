@@ -150,7 +150,13 @@ def show_main_app():
             ("Reports", "reports"),
         ]
         for label, page_key in pages:
-            if st.button(label, use_container_width=True, key=f"nav_{page_key}"):
+            is_active = st.session_state.page == page_key
+            if st.button(
+                label,
+                use_container_width=True,
+                key=f"nav_{page_key}",
+                type="primary" if is_active else "secondary"
+            ):
                 st.session_state.page = page_key
                 st.rerun()
         st.divider()
