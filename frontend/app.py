@@ -1149,7 +1149,7 @@ def show_expenses_page():
             """, unsafe_allow_html=True)
 
             import io as _io
-            import openpyxl
+            #import openpyxl
 
             # CSV download
             csv = df_all.to_csv(index=False)
@@ -1161,20 +1161,22 @@ def show_expenses_page():
             )
 
             # Excel download
-            excel_buf = _io.BytesIO()
-            df_all.to_excel(excel_buf, index=False, sheet_name="Expenses")
-            excel_buf.seek(0)
-            st.download_button(
-                "⬇ Download as Excel",
-                data=excel_buf.getvalue(),
-                file_name="expenses.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            try:
+                excel_buf = _io.BytesIO()
+                df_all.to_excel(excel_buf, index=False, sheet_name="Expenses", engine="openpyxl")
+                excel_buf.seek(0)
+                st.download_button(
+                    "⬇ Download as Excel",
+                    data=excel_buf.getvalue(),
+                    file_name="expenses.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except Exception as excel_err:
+                st.warning(f"Excel export unavailable: {str(excel_err)}")
         else:
             st.info("No expenses found.")
     except Exception as e:
         st.error(f"Could not load expenses: {str(e)}")
-
 
 def show_pending_page():
     st.cache_data.clear()
