@@ -160,18 +160,32 @@ def run_full_pipeline(
     total_amount = extracted_data.get("total_amount")
     vendor_name  = extracted_data.get("vendor_name")
 
-    # Check if text contains any financial keywords
+    # Check if text contains receipt-specific patterns
+    import re as _re
     ocr_text = ocr_result.get("cleaned_text", "").lower()
-    financial_keywords = ["total", "amount", "price", "rs", "inr", "₹",
-                         "invoice", "receipt", "bill", "paid", "tax",
-                         "gst", "subtotal", "payment", "cash", "upi"]
-    has_financial_content = any(kw in ocr_text for kw in financial_keywords)
 
-    if not has_financial_content:
+    # Must have currency amount pattern like Rs 100, ₹500, 1,234.00
+    has_amount = bool(_re.search(
+        r'(rs\.?\s*\d+|₹\s*\d+|inr\s*\d+|\d+\.\d{2}|\d{1,3}(,\d{3})+)',
+        ocr_text
+    ))
+
+    # Must have receipt-specific words (not resume words)
+    receipt_keywords = ["invoice", "receipt", "bill", "gst", "subtotal",
+                       "grand total", "net amount", "tax", "payment",
+                       "cash", "upi", "card", "paid", "balance due"]
+    has_receipt_word = any(kw in ocr_text for kw in receipt_keywords)
+
+    if not (has_amount or has_receipt_word):
         return {
             "success": False,
             "error": "File does not appear to be a receipt or invoice. Please upload a valid bill.",
         }
+
+    total_amount = total_amount or 0.0
+    vendor_name  = vendor_name or "Unknown Vendor"
+    extracted_data["total_amount"] = total_amount
+    extracted_data["vendor_name"]  = vendor_name
 
     total_amount = total_amount or 0.0
     vendor_name  = vendor_name or "Unknown Vendor"
