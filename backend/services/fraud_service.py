@@ -178,7 +178,7 @@ def check_fraud(
             "Invoice has one suspicious pattern — manual verification recommended"
         )
         fraud_risk_score += 0.15
-
+        
     fraud_risk_score = min(round(fraud_risk_score, 2), 1.0)
     requires_manual_review = fraud_risk_score >= 0.5
 
