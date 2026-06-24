@@ -49,6 +49,10 @@ CRITICAL amount extraction rules:
 - "subtotal" for food delivery = food items total ONLY (before delivery/platform fees)
 - Look for fields labeled: "Total Paid", "Grand Total", "Bill Total", "You Pay", "Order Total"
 - The LAST and LARGEST number on the bill is almost always total_amount
+- SERVICE CHARGE must be included in total_amount — it is NOT optional
+- Formula for restaurant bills: total_amount = food subtotal + service charge + CGST + SGST
+- Example: Subtotal=1150, Service Charge=115, CGST=28.75, SGST=28.75 → total_amount=1322.50
+- Fields labeled "Service Charge", "SC", "Service Tax", "Convenience Fee" must be added to total
 
 Line item extraction rules:
 - The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
@@ -76,6 +80,28 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         extracted_data = json.loads(response_text)
 
         # ── Post-processing: fix total_amount if AI still got it wrong ──────
+        # Add service charge if AI missed it
+        service_charge = extracted_data.get("service_charge") or 0
+        if service_charge == 0:
+            import re as _re3
+            sc_match = _re3.search(
+                r'service\s*charge[^\d]*([\d,]+\.?\d*)', ocr_text.lower()
+            )
+            if sc_match:
+                try:
+                    service_charge = float(sc_match.group(1).replace(",", ""))
+                except ValueError:
+                    service_charge = 0
+
+        if service_charge > 0:
+            current_total = extracted_data.get("total_amount") or 0
+            sub_check = extracted_data.get("subtotal") or 0
+            tax_check = extracted_data.get("tax_amount") or 0
+            expected_with_sc = round(sub_check + service_charge + tax_check, 2)
+            if abs(current_total - expected_with_sc) > 1.0:
+                extracted_data["total_amount"] = expected_with_sc
+                print(f"SERVICE CHARGE FIX: added {service_charge} → new total {expected_with_sc}")
+
         # Scan raw OCR for largest currency amount first
         import re as _re2
         all_amounts = _re2.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)', ocr_text.lower())
