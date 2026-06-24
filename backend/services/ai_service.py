@@ -85,6 +85,14 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         if sub > 0 and total < sub:
             extracted_data["total_amount"] = round(sub + (tax or 0), 2)
 
+        # For food delivery / multi-charge bills (delivery fee, platform fee etc.)
+        # the AI often uses food subtotal only — trust the larger OCR-parsed total
+        # Re-read total after corrections above
+        final_total = extracted_data.get("total_amount") or 0
+        recalc = round((sub or 0) + (tax or 0), 2)
+        if final_total > recalc and final_total > 0:
+            extracted_data["total_amount"] = final_total  # keep the larger value
+        
         return {"status": "success", "data": extracted_data}
     except json.JSONDecodeError as e:
         return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
