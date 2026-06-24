@@ -140,18 +140,44 @@ def check_fraud(
     if not vendor_address and not gstin:
         ai_signals += 1
 
+    # Signal G: All line item totals are suspiciously round (ending in 99 or 00)
+    if line_items and len(line_items) >= 2:
+        round_prices = sum(
+            1 for item in line_items
+            if item.get("total_price") and (
+                int(item["total_price"]) % 100 == 0 or
+                int(item["total_price"]) % 100 == 99
+            )
+        )
+        if round_prices == len(line_items):
+            ai_signals += 1
+
+    # Signal H: Receipt number looks auto-generated (pattern like XX-YYYY-MM-NNNN)
+    import re as _re
+    if receipt_number:
+        auto_pattern = _re.match(
+            r'^[A-Z]{2,5}-\d{4}-\d{2}-\d{3,6}$', str(receipt_number)
+        )
+        if auto_pattern:
+            ai_signals += 1
+
     # Accumulate AI-generated risk
     if ai_signals >= 3:
         fraud_flags.append(
             f"Possible AI-generated or fabricated invoice — "
             f"{ai_signals} suspicious patterns detected (perfect OCR, clean amounts, missing details)"
         )
-        fraud_risk_score += 0.45
+        fraud_risk_score += 0.55
     elif ai_signals == 2:
         fraud_flags.append(
             "Invoice has multiple characteristics of a digitally generated/fake bill — verify authenticity"
         )
-        fraud_risk_score += 0.25
+        fraud_risk_score += 0.40
+    elif ai_signals == 1:
+        fraud_flags.append(
+            "Invoice has one suspicious pattern — manual verification recommended"
+        )
+        fraud_risk_score += 0.15
 
     fraud_risk_score = min(round(fraud_risk_score, 2), 1.0)
     requires_manual_review = fraud_risk_score >= 0.5
