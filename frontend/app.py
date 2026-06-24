@@ -669,6 +669,10 @@ def show_scan_page():
                             r = requests.post(
                                 f"{BACKEND_URL}/expenses/scan-receipt",
                                 headers=get_headers(),
+                                # Detect content type reliably
+                                import mimetypes
+
+                                detected_type = file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream"
                                 files={"file": (file.name, file.getvalue(), file.type)},
                                 timeout=60
                             )
