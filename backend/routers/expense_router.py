@@ -46,8 +46,11 @@ ALLOWED_TYPES = [
     "image/jpeg", "image/png", "image/jpg",
     "image/webp", "image/tiff", "image/bmp",
     "application/pdf",
+    "application/octet-stream",
+    "binary/octet-stream",
 ]
 PDF_TYPE  = "application/pdf"
+PDF_TYPES = {"application/pdf", "application/octet-stream", "binary/octet-stream"}
 MAX_BULK  = 20          # raised from 10; each multi-page PDF still counts as 1
 MAX_PAGES = 30          # safety cap: ignore pages beyond this per PDF
 
@@ -136,7 +139,7 @@ def run_full_pipeline(
         return {"success": False, "error": validation["reason"]}
 
     # Stage 2 — OCR
-    if content_type == PDF_TYPE:
+    if content_type in PDF_TYPES:
         ocr_result = extract_text_from_pdf(file_bytes)
     else:
         ocr_result = extract_text_from_image(file_bytes)
@@ -426,13 +429,13 @@ async def scan_bulk_receipts(
 
         raw = await file.read()
 
-        if file.content_type == PDF_TYPE:
+        if file.content_type in PDF_TYPES:
             pages = split_pdf_pages(raw)
             if len(pages) == 1:
                 # Single-page PDF or pypdf unavailable — treat as one unit
                 work_items.append({
                     "bytes":        pages[0],
-                    "content_type": PDF_TYPE,
+                    "content_type": "application/pdf",
                     "filename":     file.filename,
                     "page_label":   file.filename,
                     "prefailed":    None,
