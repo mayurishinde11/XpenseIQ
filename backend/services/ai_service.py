@@ -32,6 +32,8 @@ Return ONLY a valid JSON object with these exact fields:
             "total_price": numeric — look for Amount/Total/Value column
         }}
     ],
+    "service_charge": numeric value of service charge if present or null,
+    "extra_charges": numeric value of any other extra charges (packing, convenience etc.) or null,
     "confidence_score": a float between 0.0 and 1.0
 }}
 
@@ -53,6 +55,10 @@ CRITICAL amount extraction rules:
 - Formula for restaurant bills: total_amount = food subtotal + service charge + CGST + SGST
 - Example: Subtotal=1150, Service Charge=115, CGST=28.75, SGST=28.75 → total_amount=1322.50
 - Fields labeled "Service Charge", "SC", "Service Tax", "Convenience Fee" must be added to total
+- IMPORTANT: Read the ENTIRE bill before deciding total_amount — do not stop at first subtotal
+- Always scan for ALL extra charges: service charge, packing charge, convenience fee, delivery fee
+- Add ALL of them to arrive at final total_amount
+- tax_amount = sum of CGST + SGST + IGST + VAT only — do NOT include service charge in tax_amount
 
 Line item extraction rules:
 - The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
@@ -97,10 +103,11 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             current_total = extracted_data.get("total_amount") or 0
             sub_check = extracted_data.get("subtotal") or 0
             tax_check = extracted_data.get("tax_amount") or 0
-            expected_with_sc = round(sub_check + service_charge + tax_check, 2)
+            extra = extracted_data.get("extra_charges") or 0
+            expected_with_sc = round(sub_check + service_charge + extra + tax_check, 2)
             if abs(current_total - expected_with_sc) > 1.0:
                 extracted_data["total_amount"] = expected_with_sc
-                print(f"SERVICE CHARGE FIX: added {service_charge} → new total {expected_with_sc}")
+                print(f"SERVICE CHARGE FIX: added sc={service_charge} extra={extra} → new total {expected_with_sc}")
 
         # Scan raw OCR for largest currency amount first
         import re as _re2
