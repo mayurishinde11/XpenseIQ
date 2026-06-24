@@ -46,6 +46,9 @@ CRITICAL amount extraction rules:
 - When in doubt: total_amount = subtotal + tax_amount
 - For food delivery bills: total_amount includes food subtotal + delivery fee + platform fee + all taxes
 - NEVER ignore delivery charges or platform fees — they are part of total_amount
+- "subtotal" for food delivery = food items total ONLY (before delivery/platform fees)
+- Look for fields labeled: "Total Paid", "Grand Total", "Bill Total", "You Pay", "Order Total"
+- The LAST and LARGEST number on the bill is almost always total_amount
 
 Line item extraction rules:
 - The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
@@ -73,6 +76,22 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         extracted_data = json.loads(response_text)
 
         # ── Post-processing: fix total_amount if AI still got it wrong ──────
+        # Scan raw OCR for largest currency amount first
+        import re as _re2
+        all_amounts = _re2.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)', ocr_text.lower())
+        if all_amounts:
+            parsed = []
+            for a in all_amounts:
+                try:
+                    parsed.append(float(a.replace(",", "")))
+                except ValueError:
+                    pass
+            if parsed:
+                ocr_max = max(parsed)
+                ai_total = extracted_data.get("total_amount") or 0
+                if ocr_max > ai_total and ocr_max < ai_total * 2.5:
+                    extracted_data["total_amount"] = ocr_max
+
         total  = extracted_data.get("total_amount") or 0
         sub    = extracted_data.get("subtotal") or 0
         tax    = extracted_data.get("tax_amount") or 0
