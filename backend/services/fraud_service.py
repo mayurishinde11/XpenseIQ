@@ -14,10 +14,14 @@ def check_fraud(
     fraud_flags = []
     fraud_risk_score = 0.0
 
-    total_amount = extracted_data.get("total_amount", 0) or 0
-    vendor_name = extracted_data.get("vendor_name", "") or ""
+    total_amount     = extracted_data.get("total_amount", 0) or 0
+    vendor_name      = extracted_data.get("vendor_name", "") or ""
     transaction_date = extracted_data.get("transaction_date", "") or ""
-    receipt_number = extracted_data.get("receipt_number", None)
+    receipt_number   = extracted_data.get("receipt_number", None)
+    subtotal         = extracted_data.get("subtotal", 0) or 0
+    tax_amount       = extracted_data.get("tax_amount", 0) or 0
+    gstin            = extracted_data.get("gstin", None)
+    line_items       = extracted_data.get("line_items", []) or []
 
     # RULE 1 — Low OCR confidence
     if ocr_confidence < 0.60:
@@ -81,17 +85,85 @@ def check_fraud(
         fraud_flags.append(f"High value transaction: ₹{total_amount}")
         fraud_risk_score += 0.15
 
+    # RULE 7 — Amount mismatch (subtotal + tax ≠ total)
+    if subtotal > 0 and tax_amount > 0:
+        expected_total = round(subtotal + tax_amount, 2)
+        if abs(expected_total - total_amount) > 1.0:
+            fraud_flags.append(
+                f"Amount mismatch: subtotal ({subtotal}) + tax ({tax_amount}) "
+                f"= {expected_total} but total shown as {total_amount}"
+            )
+            fraud_risk_score += 0.30
+
+    # RULE 8 — AI-generated / fake invoice detection
+    ai_signals = 0
+
+    # Signal A: OCR confidence suspiciously perfect (real scans are rarely perfect)
+    if ocr_confidence >= 0.98:
+        ai_signals += 1
+
+    # Signal B: Amount has exactly 2 decimal places AND is not a round number
+    # Real receipts often have odd cents; AI invoices tend to have very clean math
+    if total_amount > 0:
+        total_str = str(total_amount)
+        if "." in total_str:
+            decimal_part = total_str.split(".")[1]
+            # Suspiciously clean: exactly .00 or ends in exactly 2 clean digits
+            if decimal_part == "00":
+                ai_signals += 1
+
+    # Signal C: GSTIN present but no tax charged (common in AI-generated fakes)
+    if gstin and tax_amount == 0:
+        ai_signals += 1
+
+    # Signal D: Line items have suspiciously perfect prices (all ending in .00)
+    if line_items:
+        perfect_prices = sum(
+            1 for item in line_items
+            if item.get("unit_price") and str(item["unit_price"]).endswith(".0")
+        )
+        if len(line_items) > 0 and perfect_prices == len(line_items):
+            ai_signals += 1
+
+    # Signal E: Future date on invoice
+    if transaction_date:
+        try:
+            txn_date = datetime.strptime(transaction_date, "%Y-%m-%d")
+            if txn_date > datetime.now():
+                fraud_flags.append(f"Future transaction date: {transaction_date} — possible fake bill")
+                fraud_risk_score += 0.40
+        except ValueError:
+            pass
+
+    # Signal F: Missing vendor address / location (AI invoices often skip this)
+    vendor_address = extracted_data.get("vendor_address") or extracted_data.get("location")
+    if not vendor_address and not gstin:
+        ai_signals += 1
+
+    # Accumulate AI-generated risk
+    if ai_signals >= 3:
+        fraud_flags.append(
+            f"Possible AI-generated or fabricated invoice — "
+            f"{ai_signals} suspicious patterns detected (perfect OCR, clean amounts, missing details)"
+        )
+        fraud_risk_score += 0.45
+    elif ai_signals == 2:
+        fraud_flags.append(
+            "Invoice has multiple characteristics of a digitally generated/fake bill — verify authenticity"
+        )
+        fraud_risk_score += 0.25
+
     fraud_risk_score = min(round(fraud_risk_score, 2), 1.0)
     requires_manual_review = fraud_risk_score >= 0.5
 
     return {
-        "fraud_risk_score": fraud_risk_score,
-        "fraud_flags": fraud_flags,
-        "is_duplicate": duplicate_check["is_duplicate"],
-        "is_near_duplicate": duplicate_check["is_near_duplicate"],
-        "duplicate_match_id": duplicate_check.get("duplicate_id"),
+        "fraud_risk_score":      fraud_risk_score,
+        "fraud_flags":           fraud_flags,
+        "is_duplicate":          duplicate_check["is_duplicate"],
+        "is_near_duplicate":     duplicate_check["is_near_duplicate"],
+        "duplicate_match_id":    duplicate_check.get("duplicate_id"),
         "requires_manual_review": requires_manual_review,
-        "review_reason": ", ".join(fraud_flags) if fraud_flags else None
+        "review_reason":         ", ".join(fraud_flags) if fraud_flags else None
     }
 
 
@@ -105,10 +177,10 @@ def check_duplicate(
 ) -> dict:
 
     result = {
-        "is_duplicate": False,
+        "is_duplicate":     False,
         "is_near_duplicate": False,
-        "duplicate_id": None,
-        "duplicate_date": None
+        "duplicate_id":     None,
+        "duplicate_date":   None
     }
 
     if not vendor_name or not total_amount:
@@ -118,7 +190,7 @@ def check_duplicate(
         ninety_days_ago = datetime.now() - timedelta(days=90)
 
         recent_expenses = db.query(Expense).filter(
-            Expense.user_id == user_id,
+            Expense.user_id    == user_id,
             Expense.created_at >= ninety_days_ago
         ).all()
 
@@ -139,18 +211,18 @@ def check_duplicate(
                 expense.receipt_number and
                 receipt_number.strip() == expense.receipt_number.strip()
             ):
-                result["is_duplicate"] = True
-                result["duplicate_id"] = expense.id
+                result["is_duplicate"]   = True
+                result["duplicate_id"]   = expense.id
                 result["duplicate_date"] = str(expense.created_at)[:10]
                 return result
 
             # Check 2 — Same vendor + same amount + same date = exact duplicate
             if (
-                expense.total_amount == total_amount and
+                expense.total_amount     == total_amount and
                 expense.transaction_date == transaction_date
             ):
-                result["is_duplicate"] = True
-                result["duplicate_id"] = expense.id
+                result["is_duplicate"]   = True
+                result["duplicate_id"]   = expense.id
                 result["duplicate_date"] = str(expense.created_at)[:10]
                 return result
 
@@ -162,8 +234,8 @@ def check_duplicate(
 
                 if amount_diff_pct <= 5:
                     result["is_near_duplicate"] = True
-                    result["duplicate_id"] = expense.id
-                    result["duplicate_date"] = str(expense.created_at)[:10]
+                    result["duplicate_id"]       = expense.id
+                    result["duplicate_date"]     = str(expense.created_at)[:10]
 
     except Exception:
         pass

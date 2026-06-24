@@ -26,7 +26,7 @@ Return ONLY a valid JSON object with these exact fields:
     "vendor_category_hint": "type of business e.g. restaurant, pharmacy, fuel station or null",
     "line_items": [
         {{
-            ""description": "item name from Name of items column",
+            "description": "item name from Name of items column",
             "quantity": numeric — look for Quantity/Qty/Nos/Pcs/Units column,
             "unit_price": numeric — look for Rate/Price/MRP/Unit Price column,
             "total_price": numeric — look for Amount/Total/Value column
@@ -34,6 +34,17 @@ Return ONLY a valid JSON object with these exact fields:
     ],
     "confidence_score": a float between 0.0 and 1.0
 }}
+
+CRITICAL amount extraction rules:
+- "total_amount" MUST be the FINAL payable amount — the LARGEST bottom-line total on the bill
+- NEVER use subtotal/taxable value as total_amount
+- For Indian GST invoices: total_amount = taxable_value + CGST + SGST + IGST combined
+- Example: Taxable=456.78, IGST=82.22 → total_amount=539.00 (NOT 456.78)
+- If the bill shows "INR 539.00" or "Grand Total 539.00" or "Total Amount 539.00" — that is total_amount
+- subtotal = the pre-tax amount (taxable value / net amount before tax)
+- tax_amount = total tax added (sum of ALL tax components: CGST + SGST + IGST + VAT etc.)
+- When in doubt: total_amount = subtotal + tax_amount
+
 Line item extraction rules:
 - The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
 - The unit price column may be labeled: Rate, Price, MRP, Unit Price, Rate Rs
@@ -41,6 +52,7 @@ Line item extraction rules:
 - Always extract the actual number from the Quantity column, never default to 1
 - If quantity column exists but value is missing for a row, use 1
 - unit_price x quantity should approximately equal total_price
+
 {ocr_text}
 Return ONLY the JSON object. No explanation. No markdown. No backticks.
 """
@@ -57,6 +69,22 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             response_text = re.sub(r'\n?```$', '', response_text)
             response_text = response_text.strip()
         extracted_data = json.loads(response_text)
+
+        # ── Post-processing: fix total_amount if AI still got it wrong ──────
+        total  = extracted_data.get("total_amount") or 0
+        sub    = extracted_data.get("subtotal") or 0
+        tax    = extracted_data.get("tax_amount") or 0
+
+        # If subtotal + tax = a number larger than total, AI used subtotal as total
+        if sub > 0 and tax > 0:
+            expected_total = round(sub + tax, 2)
+            if abs(expected_total - total) > 0.5:          # mismatch of more than 50p
+                extracted_data["total_amount"] = expected_total
+
+        # If total < subtotal, something is definitely wrong — use subtotal+tax
+        if sub > 0 and total < sub:
+            extracted_data["total_amount"] = round(sub + (tax or 0), 2)
+
         return {"status": "success", "data": extracted_data}
     except json.JSONDecodeError as e:
         return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
@@ -150,7 +178,8 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
         return {"status": "success", "data": report}
     except Exception as e:
         return {"status": "error", "error": f"Report generation error: {str(e)}"}
-    
+
+
 def generate_insights(expenses: list) -> dict:
     """
     Analyzes expense records and generates
@@ -168,7 +197,6 @@ def generate_insights(expenses: list) -> dict:
             }
         }
 
-    # Build simple summary for AI
     total = sum(e.get("total_amount", 0) or 0 for e in expenses)
     categories = {}
     vendors = {}
