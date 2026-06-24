@@ -1375,35 +1375,44 @@ def show_rejected_page():
         k1, k2, k3 = st.columns(3)
         with k1:
             st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #EF4444;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Total Rejected</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">{total_rejected}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
                 <div style="width:10px;height:10px;border-radius:50%;background:#EF4444;flex-shrink:0;"></div>
-                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Total Rejected</div>
+                <span style="font-size:12px;font-weight:600;color:#EF4444;">Needs immediate review</span>
               </div>
-              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">{total_rejected}</div>
             </div>
             """, unsafe_allow_html=True)
         with k2:
             st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #F59E0B;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Amount Blocked</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">Rs {total_blocked:,.0f}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
                 <div style="width:10px;height:10px;border-radius:50%;background:#F59E0B;flex-shrink:0;"></div>
-                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Amount Blocked</div>
+                <span style="font-size:12px;font-weight:600;color:#F59E0B;">Monitor closely</span>
               </div>
-              <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">Rs {total_blocked:,.0f}</div>
             </div>
             """, unsafe_allow_html=True)
         with k3:
             st.markdown(f"""
-            <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-                 padding:22px 24px;box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:100px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #22C55E;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Avg Risk Score</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">{avg_risk:.2f}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
                 <div style="width:10px;height:10px;border-radius:50%;background:#22C55E;flex-shrink:0;"></div>
-                <div style="font-size:11px;font-weight:700;color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Avg Risk Score</div>
+                <span style="font-size:12px;font-weight:600;color:#22C55E;">Likely clean</span>
               </div>
-              <div style="font-size:32px;font-weight:800;color:#EC105C;line-height:1;">{avg_risk:.2f}</div>
             </div>
             """, unsafe_allow_html=True)
 
