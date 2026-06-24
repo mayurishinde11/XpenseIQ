@@ -728,17 +728,17 @@ def get_all_expenses(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _send_expense_email(expense, action: str, vendor_email: str, current_user_email: str):
-    """Send approval or rejection email via Brevo HTTP API."""
+    """Send approval or rejection email via SendGrid HTTP API."""
     import os
     import requests as http_requests
 
-    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
-    BREVO_SENDER  = os.getenv("BREVO_SENDER_EMAIL", current_user_email)
-    BREVO_NAME    = os.getenv("BREVO_SENDER_NAME", "XpenseIQ")
-    ALERT_TO      = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+    SENDGRID_SENDER  = os.getenv("SENDGRID_SENDER", current_user_email)
+    BREVO_NAME       = os.getenv("BREVO_SENDER_NAME", "XpenseIQ")
+    ALERT_TO         = vendor_email if vendor_email else os.getenv("ALERT_EMAIL", current_user_email)
 
-    if not BREVO_API_KEY:
-        print("EMAIL SKIP: BREVO_API_KEY not configured")
+    if not SENDGRID_API_KEY:
+        print("EMAIL SKIP: SENDGRID_API_KEY not configured")
         return
 
     vendor_name = expense.vendor_name or "Vendor"
@@ -813,21 +813,21 @@ def _send_expense_email(expense, action: str, vendor_email: str, current_user_em
 
     try:
         response = http_requests.post(
-            "https://api.brevo.com/v3/smtp/email",
+            "https://api.sendgrid.com/v3/mail/send",
             headers={
-                "api-key": BREVO_API_KEY,
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
                 "Content-Type": "application/json"
             },
             json={
-                "sender":      {"name": BREVO_NAME, "email": BREVO_SENDER},
-                "to":          [{"email": ALERT_TO}],
-                "subject":     subject,
-                "htmlContent": html
+                "personalizations": [{"to": [{"email": ALERT_TO}]}],
+                "from": {"email": SENDGRID_SENDER, "name": BREVO_NAME},
+                "subject": subject,
+                "content": [{"type": "text/html", "value": html}]
             },
             timeout=10
         )
         print(f"EMAIL SENT: status={response.status_code} to={ALERT_TO} action={action}")
-        if response.status_code not in [200, 201]:
+        if response.status_code not in [200, 201, 202]:
             print(f"EMAIL FAILED: {response.text}")
     except Exception as e:
         import traceback
