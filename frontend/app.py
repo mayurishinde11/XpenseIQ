@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import requests
+import mimetypes
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
@@ -670,10 +671,10 @@ def show_scan_page():
                                 f"{BACKEND_URL}/expenses/scan-receipt",
                                 headers=get_headers(),
                                 # Detect content type reliably
-                                import mimetypes
+                                
 
                                 detected_type = file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream"
-                                files={"file": (file.name, file.getvalue(), file.type)},
+                                files={"file": (file.name, file.getvalue(), file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream")},
                                 timeout=60
                             )
                             if r.status_code == 200:
