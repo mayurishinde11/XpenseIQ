@@ -44,6 +44,8 @@ CRITICAL amount extraction rules:
 - subtotal = the pre-tax amount (taxable value / net amount before tax)
 - tax_amount = total tax added (sum of ALL tax components: CGST + SGST + IGST + VAT etc.)
 - When in doubt: total_amount = subtotal + tax_amount
+- For food delivery bills: total_amount includes food subtotal + delivery fee + platform fee + all taxes
+- NEVER ignore delivery charges or platform fees — they are part of total_amount
 
 Line item extraction rules:
 - The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
@@ -86,12 +88,12 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             extracted_data["total_amount"] = round(sub + (tax or 0), 2)
 
         # For food delivery / multi-charge bills (delivery fee, platform fee etc.)
-        # the AI often uses food subtotal only — trust the larger OCR-parsed total
-        # Re-read total after corrections above
+        # Re-read after all corrections and keep largest value found
         final_total = extracted_data.get("total_amount") or 0
         recalc = round((sub or 0) + (tax or 0), 2)
-        if final_total > recalc and final_total > 0:
-            extracted_data["total_amount"] = final_total  # keep the larger value
+        # If recalc is larger, AI missed extra charges — use recalc
+        # If final_total is larger, it includes delivery/platform fees — keep it
+        extracted_data["total_amount"] = max(final_total, recalc)
         
         return {"status": "success", "data": extracted_data}
     except json.JSONDecodeError as e:

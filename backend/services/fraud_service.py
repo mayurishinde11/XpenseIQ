@@ -156,7 +156,8 @@ def check_fraud(
     import re as _re
     if receipt_number:
         auto_pattern = _re.match(
-            r'^[A-Z]{2,5}-\d{4}-\d{2}-\d{3,6}$', str(receipt_number)
+            r'^[A-Z]{2,10}(-[A-Z]{2,5})?-\d{4}\d{0,4}-\d{2}-\d{3,10}$',
+            str(receipt_number)
         )
         if auto_pattern:
             ai_signals += 1
