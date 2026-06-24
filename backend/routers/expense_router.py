@@ -156,9 +156,25 @@ def run_full_pipeline(
 
     extracted_data = ai_result["data"]
 
-    # Stage 4 — Receipt Validity (lenient — use defaults)
-    total_amount = extracted_data.get("total_amount") or 0.0
-    vendor_name  = extracted_data.get("vendor_name") or "Unknown Vendor"
+    # Stage 4 — Receipt Validity
+    total_amount = extracted_data.get("total_amount")
+    vendor_name  = extracted_data.get("vendor_name")
+
+    # Check if text contains any financial keywords
+    ocr_text = ocr_result.get("cleaned_text", "").lower()
+    financial_keywords = ["total", "amount", "price", "rs", "inr", "₹",
+                         "invoice", "receipt", "bill", "paid", "tax",
+                         "gst", "subtotal", "payment", "cash", "upi"]
+    has_financial_content = any(kw in ocr_text for kw in financial_keywords)
+
+    if not has_financial_content:
+        return {
+            "success": False,
+            "error": "File does not appear to be a receipt or invoice. Please upload a valid bill.",
+        }
+
+    total_amount = total_amount or 0.0
+    vendor_name  = vendor_name or "Unknown Vendor"
     extracted_data["total_amount"] = total_amount
     extracted_data["vendor_name"]  = vendor_name
 
