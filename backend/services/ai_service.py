@@ -86,72 +86,57 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         extracted_data = json.loads(response_text)
 
         # ── Post-processing: fix total_amount if AI still got it wrong ──────
-        # Add service charge if AI missed it
-        service_charge = extracted_data.get("service_charge") or 0
-        if service_charge == 0:
-            import re as _re3
-            sc_match = _re3.search(
+        import re as _re2
+
+        total   = extracted_data.get("total_amount") or 0
+        sub     = extracted_data.get("subtotal") or 0
+        tax     = extracted_data.get("tax_amount") or 0
+        sc      = extracted_data.get("service_charge") or 0
+        extra   = extracted_data.get("extra_charges") or 0
+
+        # Step 1: Find service charge from OCR if AI missed it
+        if sc == 0:
+            sc_match = _re2.search(
                 r'service\s*charge[^\d]*([\d,]+\.?\d*)', ocr_text.lower()
             )
             if sc_match:
                 try:
-                    service_charge = float(sc_match.group(1).replace(",", ""))
+                    sc = float(sc_match.group(1).replace(",", ""))
                 except ValueError:
-                    service_charge = 0
+                    sc = 0
 
-        if service_charge > 0:
-            current_total = extracted_data.get("total_amount") or 0
-            sub_check = extracted_data.get("subtotal") or 0
-            tax_check = extracted_data.get("tax_amount") or 0
-            extra = extracted_data.get("extra_charges") or 0
-            expected_with_sc = round(sub_check + service_charge + extra + tax_check, 2)
-            if abs(current_total - expected_with_sc) > 1.0:
-                extracted_data["total_amount"] = expected_with_sc
-                print(f"SERVICE CHARGE FIX: added sc={service_charge} extra={extra} → new total {expected_with_sc}")
+        # Step 2: Find ALL currency amounts in OCR text
+        all_amounts = _re2.findall(
+            r'(?:rs\.?|inr|₹)?\s*([\d,]+\.[\d]{2})', ocr_text.lower()
+        )
+        parsed_amounts = []
+        for a in all_amounts:
+            try:
+                parsed_amounts.append(float(a.replace(",", "")))
+            except ValueError:
+                pass
 
-        # Scan raw OCR for largest currency amount first
-        import re as _re2
-        all_amounts = _re2.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)', ocr_text.lower())
-        if all_amounts:
-            parsed = []
-            for a in all_amounts:
-                try:
-                    parsed.append(float(a.replace(",", "")))
-                except ValueError:
-                    pass
-            if parsed:
-                ocr_max = max(parsed)
-                ai_total = extracted_data.get("total_amount") or 0
-                if ocr_max > ai_total and ocr_max < ai_total * 2.5:
-                    extracted_data["total_amount"] = ocr_max
+        # Step 3: Calculate expected total from all components
+        expected = round(sub + tax + sc + extra, 2)
 
-        total  = extracted_data.get("total_amount") or 0
-        sub    = extracted_data.get("subtotal") or 0
-        tax    = extracted_data.get("tax_amount") or 0
+        # Step 4: Find the largest amount in OCR that matches expected or is largest
+        ocr_max = max(parsed_amounts) if parsed_amounts else 0
 
-        # If subtotal + tax = a number larger than total, AI used subtotal as total
-        if sub > 0 and tax > 0:
-            expected_total = round(sub + tax, 2)
-            if abs(expected_total - total) > 0.5:          # mismatch of more than 50p
-                extracted_data["total_amount"] = expected_total
+        # Step 5: Pick the best total using priority rules
+        if expected > total and expected > sub:
+            # We have all components — use calculated total
+            extracted_data["total_amount"] = expected
+            print(f"TOTAL FIX (calc): sub={sub} + tax={tax} + sc={sc} + extra={extra} = {expected}")
+        elif ocr_max > total and ocr_max <= total * 2.5 and ocr_max > sub:
+            # OCR max is larger and reasonable — use it
+            extracted_data["total_amount"] = ocr_max
+            print(f"TOTAL FIX (ocr_max): {total} → {ocr_max}")
+        elif total < sub:
+            # Total is less than subtotal — definitely wrong
+            extracted_data["total_amount"] = round(sub + tax + sc + extra, 2)
+            print(f"TOTAL FIX (sub>total): {total} → {extracted_data['total_amount']}")
 
-        # If total < subtotal, something is definitely wrong — use subtotal+tax
-        if sub > 0 and total < sub:
-            extracted_data["total_amount"] = round(sub + (tax or 0), 2)
-
-        # For food delivery / multi-charge bills (delivery fee, platform fee etc.)
-        # Re-read after all corrections and keep largest value found
-        final_total = extracted_data.get("total_amount") or 0
-        recalc = round((sub or 0) + (tax or 0), 2)
-        # If recalc is larger, AI missed extra charges — use recalc
-        # If final_total is larger, it includes delivery/platform fees — keep it
-        extracted_data["total_amount"] = max(final_total, recalc)
-        
         return {"status": "success", "data": extracted_data}
-    except json.JSONDecodeError as e:
-        return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
-    except Exception as e:
-        return {"status": "error", "error": f"AI service error: {str(e)}"}
 
 
 def classify_expense(vendor_name: str, line_items: list, vendor_hint: str = None) -> dict:
