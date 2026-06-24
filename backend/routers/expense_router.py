@@ -163,6 +163,8 @@ def run_full_pipeline(
     # Check if text contains receipt-specific patterns
     import re as _re
     ocr_text = ocr_result.get("cleaned_text", "").lower()
+    print(f"OCR TEXT SAMPLE: {ocr_text[:500]}")
+    print(f"EXTRACTED DATA: {extracted_data}")
 
     # Must have currency amount pattern like Rs 100, ₹500, 1,234.00
     has_amount = bool(_re.search(
