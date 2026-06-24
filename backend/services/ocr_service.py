@@ -30,11 +30,10 @@ def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
                     "reason": "Image appears to be blank or empty. Please upload a clear receipt photo."
                 }
 
-        except Exception:
-            return {
-                "is_valid": False,
-                "reason": "Could not read the image file. Please upload a valid JPG or PNG."
-            }
+        except Exception as e:
+            print(f"VALIDATE WARNING: Could not check image variance: {e}")
+            # Don't reject — let OCR attempt it
+            pass
 
     # Check 3 — PDF must have readable content
     if content_type == "application/pdf":
