@@ -70,7 +70,17 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             response_text = re.sub(r'^```[a-z]*\n?', '', response_text)
             response_text = re.sub(r'\n?```$', '', response_text)
             response_text = response_text.strip()
-        extracted_data = json.loads(response_text)
+        # Clean common JSON-breaking characters from response
+        response_text = response_text.replace('\t', ' ')
+        # Fix unescaped quotes inside string values
+        try:
+            extracted_data = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Try aggressive cleaning
+            response_text = re.sub(r'[\x00-\x1f\x7f]', ' ', response_text)
+            response_text = re.sub(r',\s*}', '}', response_text)
+            response_text = re.sub(r',\s*]', ']', response_text)
+            extracted_data = json.loads(response_text)
 
         # ── Post-processing: fix total_amount ──────────────────────────────
         import re as _re
@@ -151,7 +161,27 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         return {"status": "success", "data": extracted_data}
 
     except json.JSONDecodeError as e:
-        return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
+        # Retry once with stricter prompt
+        try:
+            retry_response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "user", "content": f"Extract expense data from this text and return ONLY valid JSON with no special characters in string values:\n\n{ocr_text[:2000]}"}
+                ],
+                temperature=0.0,
+                max_tokens=1000
+            )
+            retry_text = retry_response.choices[0].message.content.strip()
+            if retry_text.startswith("```"):
+                retry_text = re.sub(r'^```[a-z]*\n?', '', retry_text)
+                retry_text = re.sub(r'\n?```$', '', retry_text)
+            retry_text = re.sub(r'[\x00-\x1f\x7f]', ' ', retry_text.strip())
+            retry_text = re.sub(r',\s*}', '}', retry_text)
+            retry_text = re.sub(r',\s*]', ']', retry_text)
+            extracted_data = json.loads(retry_text)
+            return {"status": "success", "data": extracted_data}
+        except Exception:
+            return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
     except Exception as e:
         return {"status": "error", "error": f"AI service error: {str(e)}"}
 
