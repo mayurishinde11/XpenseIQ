@@ -43,6 +43,9 @@ if "scan_results" not in st.session_state:
 if "scan_index" not in st.session_state:
     st.session_state["scan_index"] = 0    
 
+if "confirm_clear" not in st.session_state:
+    st.session_state["confirm_clear"] = False
+
 
 def get_headers():
     return {"Authorization": f"Bearer {st.session_state.token}"}
@@ -155,12 +158,42 @@ def show_main_app():
                 st.session_state.page = page_key
                 st.rerun()
         st.divider()
+
+        # ── Clear All Data with confirmation ─────────────────────────────
+        if st.session_state.get("confirm_clear"):
+            st.warning("⚠️ This will delete ALL your expenses permanently!")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Yes", key="confirm_yes", use_container_width=True):
+                    try:
+                        r = requests.delete(
+                            f"{BACKEND_URL}/expenses/clear-all",
+                            headers=get_headers()
+                        )
+                        if r.status_code == 200:
+                            deleted = r.json().get("deleted", 0)
+                            st.session_state["confirm_clear"] = False
+                            st.success(f"✅ {deleted} expenses deleted!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to clear data.")
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+            with col_no:
+                if st.button("❌ No", key="confirm_no", use_container_width=True):
+                    st.session_state["confirm_clear"] = False
+                    st.rerun()
+        else:
+            if st.button("Clear All Data", use_container_width=True, key="nav_clear"):
+                st.session_state["confirm_clear"] = True
+                st.rerun()
+
         if st.button("Logout", use_container_width=True, key="nav_logout"):
             for k in ["token", "user_id", "email", "full_name"]:
                 st.session_state[k] = None
             st.session_state.page = "dashboard"
+            st.session_state["confirm_clear"] = False
             st.rerun()
-
     page_map = {
         "dashboard": show_dashboard,
         "scan": show_scan_page,
