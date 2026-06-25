@@ -1039,6 +1039,47 @@ def get_expense_by_id(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# UPDATE EXPENSE AMOUNT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.put("/{expense_id}/update-amount")
+def update_expense_amount(
+    expense_id:   int,
+    amount:       float,
+    db:           Session = Depends(get_db),
+    current_user          = Depends(get_current_user),
+):
+    """Allow user to manually correct extracted amount."""
+    expense = db.query(Expense).filter(
+        Expense.id      == expense_id,
+        Expense.user_id == current_user.id,
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail=f"Expense {expense_id} not found.")
+    expense.total_amount = amount
+    db.commit()
+    db.refresh(expense)
+    return {
+        "status":     "success",
+        "message":    f"Amount updated to {amount}",
+        "expense_id": expense_id,
+        "new_amount": amount
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GROQ STATUS CHECK
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/groq-status")
+def check_groq_status(current_user=Depends(get_current_user)):
+    """Check if Groq API is available."""
+    from services.ai_service import check_groq_usage
+    result = check_groq_usage()
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # DELETE EXPENSE
 # ═══════════════════════════════════════════════════════════════════════════════
 
