@@ -141,20 +141,41 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
 
         ocr_max = max(parsed_amounts) if parsed_amounts else 0
 
+        # Fix tax_amount — if AI total < subtotal, AI may have missed some tax lines
+        # Re-sum tax from OCR: find all small amounts that look like tax
+        if sub > 0 and tax > 0:
+            # Check if there are additional tax lines missed by AI
+            tax_lines = _re.findall(
+                r'(?:cgst|sgst|igst|gst|vat|cess)[^\d]*([\d]+\.[\d]{2})',
+                ocr_text.lower()
+            )
+            if tax_lines:
+                tax_sum = 0
+                for t in tax_lines:
+                    try:
+                        val = float(t)
+                        if val < 500:  # ignore OCR misreads like 522 for 5.22
+                            tax_sum += val
+                    except:
+                        pass
+                if tax_sum > tax:
+                    tax = round(tax_sum, 2)
+                    extracted_data["tax_amount"] = tax
+
+        # Recalculate expected with corrected tax
+        if sub > 0:
+            expected = round(sub - discount + extra + sc + tax, 2)
+
         print(f"TOTAL DEBUG: ai={ai_total} sub={sub} tax={tax} sc={sc} extra={extra} discount={discount} expected={expected} ocr_max={ocr_max}")
 
         # Step 4: Pick best total
-        # Priority: expected calculation > OCR max > AI total
         if expected > 0 and abs(expected - ai_total) > 1.0:
-            # Our calculation differs from AI — trust our math
             extracted_data["total_amount"] = expected
             print(f"TOTAL FIX (calc): {ai_total} → {expected}")
         elif ocr_max > 0 and ocr_max > ai_total and ocr_max < ai_total * 2.0:
-            # OCR found a larger reasonable amount
             extracted_data["total_amount"] = ocr_max
             print(f"TOTAL FIX (ocr): {ai_total} → {ocr_max}")
         elif sub > 0 and ai_total < sub:
-            # Total is less than subtotal — definitely wrong
             extracted_data["total_amount"] = round(sub + tax + sc + extra - discount, 2)
             print(f"TOTAL FIX (sub>total): {ai_total} → {extracted_data['total_amount']}")
 
