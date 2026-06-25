@@ -23,7 +23,9 @@ def extract_total_from_ocr(ocr_text: str) -> float:
     # These patterns match the actual bottom-line total on any bill
     total_patterns = [
         r'(?:grand\s*total|total\s*paid|net\s*payable|amount\s*due|total\s*amount\s*due|bill\s*total|you\s*pay|total\s*payable|amount\s*payable|final\s*total|total\s*bill)[^\d]*([\d,]+\.?\d*)',
+        r'(?:total\s*paid|paid\s*total)[^\d]*rs\.?\s*([\d,]+\.?\d*)',
         r'(?:total\s*paid|paid\s*total)[^\d]*([\d,]+\.?\d*)',
+        r'rs\.?\s*([\d,]+\.?\d*)\s*(?:total|paid)',
         r'(?:^|\s)total[^\d]*([\d,]+\.?\d*)(?:\s*$|\s*inr|\s*rs)',
     ]
     for pattern in total_patterns:
@@ -135,16 +137,30 @@ def extract_components_from_ocr(ocr_text: str) -> dict:
     tax_from_components = result['cgst'] + result['sgst'] + result['igst'] + result['vat']
     result['tax'] = max(tax_from_components, gst_total)
 
-    # Discount / offers
+    # Discount / offers — including line-item style discounts
     discount_patterns = [
-        r'(?:discount|offer|savings|zomato\s*gold|swiggy\s*one|coupon|promo)[^\d]*([\d,]+\.?\d*)',
-        r'-\s*rs\.?\s*([\d,]+\.?\d*)',  # negative amounts
+        r'(?:discount|offer|savings|zomato\s*gold|swiggy\s*one|coupon|promo|cashback)[^\d]*([\d,]+\.?\d*)',
+        r'-\s*rs\.?\s*([\d,]+\.?\d*)',       # negative Rs amount
+        r'(?:rs\.?|-)\s*([\d,]+\.?\d*)\s*(?:off|discount)',
         r'off[^\d]*([\d,]+\.?\d*)',
     ]
     for p in discount_patterns:
         val = find_amount(p, text)
         if val > result['discount']:
             result['discount'] = val
+
+    # Also scan each line for negative amounts (line-item discounts like "Swiggy One Discount -50.00")
+    for line in text.split('\n'):
+        if any(kw in line for kw in ['discount', 'offer', 'savings', 'gold', 'coupon', 'one discount']):
+            # Find any number on this line
+            nums = re.findall(r'[\d,]+\.?\d*', line)
+            for n in nums:
+                try:
+                    val = float(n.replace(',', ''))
+                    if val > result['discount'] and 0 < val < 10000:
+                        result['discount'] = val
+                except:
+                    pass
 
     # Delivery fee
     result['delivery'] = find_amount(
