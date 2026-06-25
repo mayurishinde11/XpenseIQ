@@ -85,16 +85,17 @@ def extract_text_from_image(image_bytes: bytes) -> dict:
     img_array = np.clip((img_array - 128) * 1.5 + 128, 0, 255).astype(np.uint8)
     gray = Image.fromarray(img_array)
 
-    # Step 4: Apply threshold to make text sharper (binarization)
-    threshold = 140
+    # Step 4: Apply adaptive threshold based on image brightness
+    img_arr = np.array(gray)
+    avg_brightness = img_arr.mean()
+    threshold = 100 if avg_brightness < 128 else 150
     gray = gray.point(lambda x: 0 if x < threshold else 255, '1')
     gray = gray.convert("L")
-
     # Use preprocessed image for OCR
     image = gray
 
     # Run OCR with better config for structured documents
-    custom_config = r'--oem 3 --psm 6'
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/:@#-+()% '
     raw_text = pytesseract.image_to_string(image, lang="eng", config=custom_config)
     # Get confidence data
     from pytesseract import Output
