@@ -768,6 +768,29 @@ def show_scan_page():
                         st.success("Approved — added to expenses")
                     else:
                         st.warning("Pending Verification — awaiting review")
+
+                    # Allow user to correct the total amount
+                    expense_id = data.get("expense_id")
+                    current_total = extracted.get("total_amount", 0) or 0
+                    corrected = st.number_input(
+                        "Correct Total Amount (if wrong)",
+                        min_value=0.0,
+                        value=float(current_total),
+                        step=0.01,
+                        key=f"correct_amt_{expense_id}"
+                    )
+                    if corrected != current_total:
+                        if st.button("Update Amount", key=f"update_amt_{expense_id}", type="primary"):
+                            r = requests.put(
+                                f"{BACKEND_URL}/expenses/{expense_id}/update-amount",
+                                headers=get_headers(),
+                                params={"amount": corrected}
+                            )
+                            if r.status_code == 200:
+                                st.success(f"Amount updated to Rs {corrected:,.2f}")
+                                st.rerun()
+                            else:
+                                st.error("Failed to update amount")
                     st.markdown(f"""
                     <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
                          padding:14px;margin-top:8px;">

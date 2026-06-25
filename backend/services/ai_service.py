@@ -257,13 +257,15 @@ def calculate_best_total(ocr_text: str, ai_total: float, ai_subtotal: float, ai_
     if ocr_total > 0:
         # OCR found an explicit total
         if calc_total > 0 and abs(calc_total - ocr_total) < 5:
-            # Both agree — use OCR (directly extracted)
+            # Both agree — use OCR
             return ocr_total
+        elif calc_total > 0 and disc > 0 and calc_total < ocr_total:
+            # Discount exists and calc is lower — discount was subtracted correctly
+            return calc_total
         elif calc_total > 0 and calc_total > ocr_total * 0.8 and calc_total < ocr_total * 1.2:
             # Close enough — trust OCR
             return ocr_total
         else:
-            # They disagree — use whichever is larger (OCR total labels are reliable)
             return ocr_total
 
     if calc_total > 0:
