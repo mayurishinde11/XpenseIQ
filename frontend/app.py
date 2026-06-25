@@ -843,17 +843,44 @@ def show_scan_page():
                     </div>
                     """, unsafe_allow_html=True)
 
+                    # Build amount breakdown rows dynamically
+                    breakdown_rows = ""
+                    subtotal = extracted.get('subtotal')
+                    discount = extracted.get('discount_amount')
+                    extra    = extracted.get('extra_charges')
+                    sc       = extracted.get('service_charge')
+                    tax      = extracted.get('tax_amount')
+                    tax_type = extracted.get('tax_type') or 'GST'
+
+                    if subtotal:
+                        breakdown_rows += f"""
+                        <tr><td style="color:#6D6578;padding:5px 8px;">Item Subtotal</td>
+                            <td style="text-align:right;font-weight:500;padding:5px 8px;">Rs {subtotal:,.2f}</td></tr>"""
+                    if discount:
+                        breakdown_rows += f"""
+                        <tr><td style="color:#22C55E;padding:5px 8px;">Discount / Offer</td>
+                            <td style="text-align:right;font-weight:500;padding:5px 8px;color:#22C55E;">- Rs {discount:,.2f}</td></tr>"""
+                    if extra:
+                        breakdown_rows += f"""
+                        <tr><td style="color:#6D6578;padding:5px 8px;">Delivery / Platform Fee</td>
+                            <td style="text-align:right;font-weight:500;padding:5px 8px;">Rs {extra:,.2f}</td></tr>"""
+                    if sc:
+                        breakdown_rows += f"""
+                        <tr><td style="color:#6D6578;padding:5px 8px;">Service Charge</td>
+                            <td style="text-align:right;font-weight:500;padding:5px 8px;">Rs {sc:,.2f}</td></tr>"""
+                    if tax:
+                        breakdown_rows += f"""
+                        <tr><td style="color:#6D6578;padding:5px 8px;">{tax_type}</td>
+                            <td style="text-align:right;font-weight:500;padding:5px 8px;">Rs {tax:,.2f}</td></tr>"""
+
                     st.markdown(f"""
                     <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
                          padding:14px;margin-bottom:10px;">
                       <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
                            letter-spacing:.06em;margin-bottom:8px;">Amount Breakdown</div>
                       <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                        <tr><td style="color:#6D6578;padding:6px 8px;">Subtotal</td>
-                            <td style="text-align:right;font-weight:500;padding:6px 8px;">Rs {extracted.get('subtotal','—')}</td></tr>
-                        <tr><td style="color:#6D6578;padding:6px 8px;">{extracted.get('tax_type','Tax')}</td>
-                            <td style="text-align:right;font-weight:500;padding:6px 8px;">Rs {extracted.get('tax_amount','—')}</td></tr>
-                        <tr style="border-top:1px solid #EAE2EE;">
+                        {breakdown_rows}
+                        <tr style="border-top:2px solid #EAE2EE;">
                           <td style="font-weight:700;color:#1C1424;padding:8px 8px 4px 8px;">Total</td>
                           <td style="text-align:right;font-weight:700;color:#AA225B;font-size:14px;padding:8px 8px 4px 8px;">
                             Rs {extracted.get('total_amount',0):,.2f}
