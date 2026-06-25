@@ -22,12 +22,26 @@ def extract_total_from_ocr(ocr_text: str) -> float:
     # ── Priority 1: Find explicit total labels (most reliable) ──────────────
     # These patterns match the actual bottom-line total on any bill
     total_patterns = [
-        r'(?:grand\s*total|total\s*paid|net\s*payable|amount\s*due|total\s*amount\s*due|bill\s*total|you\s*pay|total\s*payable|amount\s*payable|final\s*total|total\s*bill)[^\d]*([\d,]+\.?\d*)',
-        r'(?:total\s*paid|paid\s*total)[^\d]*rs\.?\s*([\d,]+\.?\d*)',
-        r'(?:total\s*paid|paid\s*total)[^\d]*([\d,]+\.?\d*)',
-        r'rs\.?\s*([\d,]+\.?\d*)\s*(?:total|paid)',
-        r'(?:^|\s)total[^\d]*([\d,]+\.?\d*)(?:\s*$|\s*inr|\s*rs)',
+        r'(?:grand\s*total|net\s*payable|amount\s*due|total\s*amount\s*due|bill\s*total|you\s*pay|total\s*payable|amount\s*payable|final\s*total|total\s*bill)[^\d]*([\d,]+\.?\d*)',
+        r'total\s*paid[^\d]*rs\.?\s*([\d,]+\.?\d*)',
+        r'total\s*paid[^\d]*([\d,]+\.?\d*)',
+        r'rs\.?\s*([\d,]+\.?\d*)\s*(?:grand\s*total|net\s*payable)',
     ]
+    # Also scan line by line for total labels
+    for line in lines:
+        line_clean = line.strip()
+        if any(kw in line_clean for kw in [
+            'grand total', 'total paid', 'net payable', 'amount due',
+            'bill total', 'you pay', 'total payable', 'net amount payable'
+        ]):
+            nums = re.findall(r'[\d,]+\.\d{2}', line_clean)
+            for n in reversed(nums):
+                try:
+                    val = float(n.replace(',', ''))
+                    if val > 10:
+                        return val
+                except:
+                    pass
     for pattern in total_patterns:
         matches = re.findall(pattern, text, re.MULTILINE | re.IGNORECASE)
         for m in matches:
@@ -77,116 +91,131 @@ def extract_total_from_ocr(ocr_text: str) -> float:
 def extract_components_from_ocr(ocr_text: str) -> dict:
     """
     Extract all bill components from OCR text using regex.
-    Returns: subtotal, tax, discount, delivery, platform, service, extra
     """
     text = ocr_text.lower()
     result = {
-        'subtotal': 0.0,
-        'tax': 0.0,
-        'cgst': 0.0,
-        'sgst': 0.0,
-        'igst': 0.0,
-        'vat': 0.0,
-        'discount': 0.0,
-        'delivery': 0.0,
-        'platform': 0.0,
-        'service': 0.0,
-        'packing': 0.0,
-        'convenience': 0.0,
+        'subtotal': 0.0, 'tax': 0.0, 'cgst': 0.0, 'sgst': 0.0,
+        'igst': 0.0, 'vat': 0.0, 'discount': 0.0, 'delivery': 0.0,
+        'platform': 0.0, 'service': 0.0, 'packing': 0.0, 'convenience': 0.0,
     }
 
     def find_amount(pattern, text):
-        m = re.search(pattern, text)
+        m = re.search(pattern, text, re.IGNORECASE)
         if m:
             try:
                 val = float(m.group(1).replace(',', ''))
-                return val if 0 < val < 100000 else 0.0
+                return val if 0 < val < 1000000 else 0.0
             except:
                 return 0.0
         return 0.0
 
-    # Subtotal
-    result['subtotal'] = find_amount(
-        r'(?:sub\s*total|item\s*total|subtotal|net\s*amount|taxable\s*value|taxable\s*amount)[^\d]*([\d,]+\.?\d*)', text
-    )
+    def find_line_amount(line):
+        """Get the last number on a line — usually the amount."""
+        nums = re.findall(r'[\d,]+\.\d{2}', line)
+        for n in reversed(nums):
+            try:
+                val = float(n.replace(',', ''))
+                if val > 0:
+                    return val
+            except:
+                pass
+        return 0.0
 
-    # CGST
-    result['cgst'] = find_amount(r'cgst[^\d]*([\d,]+\.\d{2})', text)
+    lines = text.split('\n')
 
-    # SGST
-    result['sgst'] = find_amount(r'sgst[^\d]*([\d,]+\.\d{2})', text)
+    # ── Subtotal ─────────────────────────────────────────────────────────────
+    subtotal_keywords = ['sub total', 'subtotal', 'item total', 'net amount',
+                         'taxable value', 'taxable amount', 'basic amount']
+    for line in lines:
+        if any(kw in line for kw in subtotal_keywords):
+            val = find_line_amount(line)
+            if val > result['subtotal']:
+                result['subtotal'] = val
 
-    # IGST
-    result['igst'] = find_amount(r'igst[^\d]*([\d,]+\.\d{2})', text)
+    # ── Tax lines ─────────────────────────────────────────────────────────────
+    cgst_total, sgst_total, igst_total, vat_total = 0.0, 0.0, 0.0, 0.0
+    gst_lines_total = 0.0
 
-    # VAT
-    result['vat'] = find_amount(r'vat[^\d]*([\d,]+\.\d{2})', text)
+    for line in lines:
+        if 'cgst' in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                cgst_total += val
+        if 'sgst' in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                sgst_total += val
+        if 'igst' in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                igst_total += val
+        if 'vat' in line and 'taxable' not in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                vat_total += val
+        # GST lines (not CGST/SGST/IGST)
+        if 'gst' in line and 'cgst' not in line and 'sgst' not in line and 'igst' not in line and 'gstin' not in line and 'breakup' not in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                gst_lines_total += val
 
-    # GST lines — find all GST amounts (can be multiple lines)
-    gst_matches = re.findall(r'gst[^\d]*([\d,]+\.\d{2})', text)
-    gst_total = 0.0
-    for m in gst_matches:
+    tax_from_components = cgst_total + sgst_total + igst_total + vat_total
+    result['tax'] = max(tax_from_components, gst_lines_total)
+    result['cgst'] = cgst_total
+    result['sgst'] = sgst_total
+    result['igst'] = igst_total
+    result['vat']  = vat_total
+
+    # ── Discount — CRITICAL: must not pick up item prices ────────────────────
+    # Only look for lines that explicitly mention discount keywords
+    discount_keywords = ['discount', 'zomato gold', 'swiggy one', 'coupon',
+                         'promo', 'cashback', 'offer', 'savings', 'voucher']
+    for line in lines:
+        if any(kw in line for kw in discount_keywords):
+            # Skip lines that are just label rows with no amount
+            val = find_line_amount(line)
+            # Sanity check: discount should be less than subtotal
+            sub = result['subtotal']
+            if val > 0 and (sub == 0 or val < sub * 0.8):
+                if val > result['discount']:
+                    result['discount'] = val
+
+    # Also catch "-Rs X" style discounts
+    neg_matches = re.findall(r'-\s*(?:rs\.?)?\s*([\d,]+\.\d{2})', text)
+    for m in neg_matches:
         try:
             val = float(m.replace(',', ''))
-            if 0 < val < 10000:
-                gst_total += val
+            sub = result['subtotal']
+            if val > 0 and (sub == 0 or val < sub * 0.8):
+                if val > result['discount']:
+                    result['discount'] = val
         except:
             pass
 
-    # Total tax = CGST + SGST + IGST + VAT + any standalone GST lines
-    tax_from_components = result['cgst'] + result['sgst'] + result['igst'] + result['vat']
-    result['tax'] = max(tax_from_components, gst_total)
-
-    # Discount / offers — including line-item style discounts
-    discount_patterns = [
-        r'(?:discount|offer|savings|zomato\s*gold|swiggy\s*one|coupon|promo|cashback)[^\d]*([\d,]+\.?\d*)',
-        r'-\s*rs\.?\s*([\d,]+\.?\d*)',       # negative Rs amount
-        r'(?:rs\.?|-)\s*([\d,]+\.?\d*)\s*(?:off|discount)',
-        r'off[^\d]*([\d,]+\.?\d*)',
-    ]
-    for p in discount_patterns:
-        val = find_amount(p, text)
-        if val > result['discount']:
-            result['discount'] = val
-
-    # Also scan each line for negative amounts (line-item discounts like "Swiggy One Discount -50.00")
-    for line in text.split('\n'):
-        if any(kw in line for kw in ['discount', 'offer', 'savings', 'gold', 'coupon', 'one discount']):
-            # Find any number on this line
-            nums = re.findall(r'[\d,]+\.?\d*', line)
-            for n in nums:
-                try:
-                    val = float(n.replace(',', ''))
-                    if val > result['discount'] and 0 < val < 10000:
-                        result['discount'] = val
-                except:
-                    pass
-
-    # Delivery fee
-    result['delivery'] = find_amount(
-        r'delivery\s*(?:fee|charge|charges)[^\d]*([\d,]+\.?\d*)', text
-    )
-
-    # Platform fee
-    result['platform'] = find_amount(r'platform\s*fee[^\d]*([\d,]+\.?\d*)', text)
-
-    # Service charge
-    result['service'] = find_amount(
-        r'service\s*(?:charge|charges|tax)[^\d]*([\d,]+\.?\d*)', text
-    )
-
-    # Packing charge
-    result['packing'] = find_amount(
-        r'packing\s*(?:fee|charge|charges)[^\d]*([\d,]+\.?\d*)', text
-    )
-
-    # Convenience fee
-    result['convenience'] = find_amount(
-        r'convenience\s*fee[^\d]*([\d,]+\.?\d*)', text
-    )
+    # ── Extra charges ─────────────────────────────────────────────────────────
+    for line in lines:
+        if 'delivery fee' in line or 'delivery charge' in line:
+            val = find_line_amount(line)
+            if 0 < val < 5000:
+                result['delivery'] = val
+        if 'platform fee' in line:
+            val = find_line_amount(line)
+            if 0 < val < 5000:
+                result['platform'] = val
+        if 'packing' in line and 'charge' in line:
+            val = find_line_amount(line)
+            if 0 < val < 5000:
+                result['packing'] = val
+        if 'convenience fee' in line:
+            val = find_line_amount(line)
+            if 0 < val < 5000:
+                result['convenience'] = val
+        if 'service charge' in line or 'service tax' in line:
+            val = find_line_amount(line)
+            if 0 < val < 50000:
+                result['service'] = val
 
     return result
-
 
 def calculate_best_total(ocr_text: str, ai_total: float, ai_subtotal: float, ai_tax: float) -> float:
     """
@@ -206,8 +235,15 @@ def calculate_best_total(ocr_text: str, ai_total: float, ai_subtotal: float, ai_
     sc   = components['service']
 
     calc_total = 0.0
-    if sub > 0:
+    # Only use subtotal in calc if it's reasonable (OCR sometimes misreads large numbers)
+    # If subtotal looks wrong (too small compared to tax), skip it
+    if sub > 0 and (tax == 0 or sub > tax * 0.5):
         calc_total = round(sub - disc + extra + sc + tax, 2)
+    elif tax > 0:
+        # Fallback: if we have tax but no reliable subtotal, use AI subtotal
+        ai_sub = ai_subtotal or 0
+        if ai_sub > tax:
+            calc_total = round(ai_sub - disc + extra + sc + tax, 2)
 
     print(f"AMOUNT STRATEGIES: ocr={ocr_total} calc={calc_total} ai={ai_total}")
     print(f"COMPONENTS: sub={sub} tax={tax} disc={disc} extra={extra} sc={sc}")
