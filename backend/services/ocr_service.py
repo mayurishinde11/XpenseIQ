@@ -64,16 +64,38 @@ def extract_text_from_image(image_bytes: bytes) -> dict:
     Takes raw image bytes and extracts text using Tesseract OCR.
     Supports JPG, PNG, WEBP, TIFF, BMP formats.
     """
+    import numpy as np
 
     # Convert raw bytes into PIL Image
     image = Image.open(io.BytesIO(image_bytes))
-
-    # Convert to RGB for consistent results
     image = image.convert("RGB")
 
-    # Run OCR
-    raw_text = pytesseract.image_to_string(image, lang="eng")
+    # ── Image preprocessing to improve OCR accuracy ──────────────────────
+    # Step 1: Upscale for better OCR on small text
+    w, h = image.size
+    if w < 1500:
+        scale = 1500 / w
+        image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
+    # Step 2: Convert to grayscale
+    gray = image.convert("L")
+
+    # Step 3: Increase contrast using numpy
+    img_array = np.array(gray, dtype=np.float32)
+    img_array = np.clip((img_array - 128) * 1.5 + 128, 0, 255).astype(np.uint8)
+    gray = Image.fromarray(img_array)
+
+    # Step 4: Apply threshold to make text sharper (binarization)
+    threshold = 140
+    gray = gray.point(lambda x: 0 if x < threshold else 255, '1')
+    gray = gray.convert("L")
+
+    # Use preprocessed image for OCR
+    image = gray
+
+    # Run OCR with better config for structured documents
+    custom_config = r'--oem 3 --psm 6'
+    raw_text = pytesseract.image_to_string(image, lang="eng", config=custom_config)
     # Get confidence data
     from pytesseract import Output
     data = pytesseract.image_to_data(image, output_type=Output.DICT)
