@@ -173,6 +173,8 @@ def show_main_app():
                         if r.status_code == 200:
                             deleted = r.json().get("deleted", 0)
                             st.session_state["confirm_clear"] = False
+                            st.session_state["scan_results"] = []
+                            st.session_state["scan_index"] = 0
                             st.success(f"✅ {deleted} expenses deleted!")
                             st.rerun()
                         else:
