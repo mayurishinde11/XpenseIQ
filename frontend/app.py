@@ -175,6 +175,10 @@ def show_main_app():
                             st.session_state["confirm_clear"] = False
                             st.session_state["scan_results"] = []
                             st.session_state["scan_index"] = 0
+                            # Clear file uploader state
+                            for key in list(st.session_state.keys()):
+                                if "uploader" in key.lower() or "file" in key.lower():
+                                    del st.session_state[key]
                             st.success(f"✅ {deleted} expenses deleted!")
                             st.rerun()
                         else:
