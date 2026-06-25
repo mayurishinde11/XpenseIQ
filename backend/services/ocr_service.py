@@ -1,3 +1,121 @@
+# ocr_service.py
+# Updated to support:
+# - Vision AI (Groq) — primary, most accurate
+# - Images: JPG, PNG, WEBP, TIFF, BMP — Tesseract fallback
+# - PDF files (using poppler + pdf2image) — Tesseract fallback
+
+import pytesseract
+from PIL import Image
+import io
+import re
+import os
+
+if os.name == 'nt':  # Windows only
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VISION AI OCR — Primary method (most accurate)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def extract_text_with_vision(image_bytes: bytes, content_type: str = "image/png") -> dict:
+    """
+    Use Groq Vision AI to extract text from image.
+    Much more accurate than Tesseract for:
+    - Colored backgrounds (blue/red table headers)
+    - Styled fonts
+    - Mixed layouts
+    - Small text
+    Falls back to None if API fails.
+    """
+    import base64
+    import requests as _req
+
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    if not GROQ_API_KEY:
+        print("VISION AI: No GROQ_API_KEY found, skipping")
+        return None
+
+    # Convert image to base64
+    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    # Ensure valid content type for vision
+    if content_type not in ["image/jpeg", "image/jpg", "image/png", "image/webp"]:
+        content_type = "image/png"
+
+    prompt = """You are an OCR system. Extract ALL text from this invoice/receipt image exactly as it appears.
+
+Include every number, label, amount, date, and text visible.
+Pay special attention to:
+- All monetary amounts (item prices, subtotals, totals, taxes, discounts)
+- Table data row by row
+- Grand Total / Total Amount / Net Payable at the bottom
+- Invoice number, date, GSTIN
+- Vendor name and address
+
+Format: raw text line by line, preserving layout.
+Do NOT summarize. Extract every single piece of text exactly as shown."""
+
+    try:
+        response = _req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{content_type};base64,{b64_image}"
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 2000,
+                "temperature": 0.1
+            },
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            text = response.json()["choices"][0]["message"]["content"]
+            cleaned = clean_ocr_text(text)
+            word_count = len(cleaned.split())
+            print(f"VISION AI SUCCESS: {word_count} words extracted")
+            return {
+                "raw_text":        text,
+                "cleaned_text":    cleaned,
+                "confidence_score": 0.95,
+                "word_count":      word_count,
+                "source":          "vision_ai"
+            }
+        elif response.status_code == 429:
+            print("VISION AI: Rate limit hit, falling back to Tesseract")
+            return None
+        else:
+            print(f"VISION AI: Failed with status {response.status_code}, falling back to Tesseract")
+            return None
+
+    except Exception as e:
+        print(f"VISION AI ERROR: {e} — falling back to Tesseract")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VALIDATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
     """
     Validates a file before sending it to OCR.
@@ -18,21 +136,15 @@ def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
         try:
             image = Image.open(io.BytesIO(file_bytes))
             image = image.convert("RGB")
-
-            # Convert to numpy array and check variance
             img_array = np.array(image)
-
-            # If variance is very low, image is blank or single color
             variance = np.var(img_array)
             if variance < 100:
                 return {
                     "is_valid": False,
                     "reason": "Image appears to be blank or empty. Please upload a clear receipt photo."
                 }
-
         except Exception as e:
             print(f"VALIDATE WARNING: Could not check image variance: {e}")
-            # Don't reject — let OCR attempt it
             pass
 
     # Check 3 — PDF must have readable content
@@ -44,64 +156,64 @@ def validate_image_file(file_bytes: bytes, content_type: str) -> dict:
             }
 
     return {"is_valid": True, "reason": None}
-# ocr_service.py
-# Updated to support:
-# - Images: JPG, PNG, WEBP, TIFF, BMP
-# - PDF files (using poppler + pdf2image)
 
-import pytesseract
-from PIL import Image
-import io
-import re
-import os
-if os.name == 'nt':  # Windows only
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-# Tell pytesseract where Tesseract is installed
-#pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-def extract_text_from_image(image_bytes: bytes) -> dict:
+# ═══════════════════════════════════════════════════════════════════════════════
+# IMAGE OCR — Vision AI first, Tesseract fallback
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def extract_text_from_image(image_bytes: bytes, content_type: str = "image/png") -> dict:
     """
-    Takes raw image bytes and extracts text using Tesseract OCR.
-    Supports JPG, PNG, WEBP, TIFF, BMP formats.
+    Extracts text from image.
+    1st: Tries Vision AI (Groq) — handles colored backgrounds, styled fonts
+    2nd: Falls back to Tesseract with preprocessing
     """
     import numpy as np
 
-    # Convert raw bytes into PIL Image
+    # ── Step 1: Try Vision AI first ──────────────────────────────────────────
+    vision_result = extract_text_with_vision(image_bytes, content_type)
+    if vision_result and vision_result.get("word_count", 0) > 5:
+        return vision_result
+
+    print("VISION AI: Not available or insufficient text — using Tesseract")
+
+    # ── Step 2: Tesseract with preprocessing ─────────────────────────────────
     image = Image.open(io.BytesIO(image_bytes))
     image = image.convert("RGB")
 
-    # ── Image preprocessing to improve OCR accuracy ──────────────────────
-    # Step 1: Upscale for better OCR on small text
+    # Upscale for better OCR on small text
     w, h = image.size
     if w < 1500:
         scale = 1500 / w
         image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
-    # Step 2: Convert to grayscale
+    # Convert to grayscale
     gray = image.convert("L")
 
-    # Step 3: Increase contrast using numpy
+    # Increase contrast
     img_array = np.array(gray, dtype=np.float32)
-    img_array = np.clip((img_array - 128) * 1.5 + 128, 0, 255).astype(np.uint8)
+    img_array = np.clip((img_array - 128) * 2.0 + 128, 0, 255).astype(np.uint8)
     gray = Image.fromarray(img_array)
 
-    # Step 4: Apply adaptive threshold based on image brightness
+    # Sharpen
+    from PIL import ImageFilter
+    gray = gray.filter(ImageFilter.SHARPEN)
+    gray = gray.filter(ImageFilter.SHARPEN)
+
+    # Adaptive threshold
     img_arr = np.array(gray)
     avg_brightness = img_arr.mean()
     threshold = 100 if avg_brightness < 128 else 150
     gray = gray.point(lambda x: 0 if x < threshold else 255, '1')
     gray = gray.convert("L")
-    # Use preprocessed image for OCR
-    image = gray
 
-    # Run OCR with better config for structured documents
-    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/:@#-+()% '
-    raw_text = pytesseract.image_to_string(image, lang="eng", config=custom_config)
-    # Get confidence data
+    # Run Tesseract
+    custom_config = r'--oem 3 --psm 6'
+    raw_text = pytesseract.image_to_string(gray, lang="eng", config=custom_config)
+
+    # Get confidence
     from pytesseract import Output
-    data = pytesseract.image_to_data(image, output_type=Output.DICT)
-
-    # Calculate average confidence
+    data = pytesseract.image_to_data(gray, output_type=Output.DICT)
     confidences = [
         int(c) for c in data["conf"]
         if str(c).strip() != "-1" and str(c).strip() != ""
@@ -109,82 +221,94 @@ def extract_text_from_image(image_bytes: bytes) -> dict:
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0
     confidence_score = round(avg_confidence / 100, 2)
 
-    # Clean the text
     cleaned_text = clean_ocr_text(raw_text)
 
     return {
-        "raw_text": raw_text,
-        "cleaned_text": cleaned_text,
+        "raw_text":        raw_text,
+        "cleaned_text":    cleaned_text,
         "confidence_score": confidence_score,
-        "word_count": len(cleaned_text.split()),
-        "source": "image"
+        "word_count":      len(cleaned_text.split()),
+        "source":          "tesseract"
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PDF OCR — Vision AI per page, Tesseract fallback
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
     """
-    Extracts text from a PDF file.
-    Uses poppler to convert each page to an image,
-    then runs Tesseract OCR on each page.
+    Extracts text from PDF.
+    Converts each page to image, then tries Vision AI, falls back to Tesseract.
     """
     try:
         from pdf2image import convert_from_bytes
-        import os
         poppler_path = None if os.name != 'nt' else r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
 
-        # Convert PDF pages to list of PIL Images
-        # poppler_path tells pdf2image where poppler is installed
-        images = convert_from_bytes(
-            pdf_bytes,
-            poppler_path=poppler_path
-        )
+        images = convert_from_bytes(pdf_bytes, poppler_path=poppler_path)
 
-        all_text = ""
+        all_text      = ""
         all_confidences = []
 
-        # Run OCR on each page
         for i, image in enumerate(images):
             image = image.convert("RGB")
 
-            # Extract text from this page
-            page_text = pytesseract.image_to_string(image, lang="eng")
+            # Convert page to bytes for Vision AI
+            page_buf = io.BytesIO()
+            image.save(page_buf, format="PNG")
+            page_bytes = page_buf.getvalue()
+
+            # Try Vision AI first
+            vision_result = extract_text_with_vision(page_bytes, "image/png")
+            if vision_result and vision_result.get("word_count", 0) > 5:
+                page_text = vision_result["raw_text"]
+                all_confidences.append(95)
+                print(f"VISION AI: PDF page {i+1} — {vision_result['word_count']} words")
+            else:
+                # Fall back to Tesseract
+                page_text = pytesseract.image_to_string(image, lang="eng")
+                from pytesseract import Output
+                data = pytesseract.image_to_data(image, output_type=Output.DICT)
+                confidences = [
+                    int(c) for c in data["conf"]
+                    if str(c).strip() != "-1" and str(c).strip() != ""
+                ]
+                if confidences:
+                    all_confidences.extend(confidences)
+                print(f"TESSERACT: PDF page {i+1} fallback")
+
             all_text += f"\n--- Page {i+1} ---\n{page_text}"
 
-            # Get confidence for this page
-            from pytesseract import Output
-            data = pytesseract.image_to_data(image, output_type=Output.DICT)
-            confidences = [
-                int(c) for c in data["conf"]
-                if str(c).strip() != "-1" and str(c).strip() != ""
-            ]
-            if confidences:
-                all_confidences.extend(confidences)
-
-        # Calculate overall confidence
-        avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0
+        avg_confidence  = sum(all_confidences) / len(all_confidences) if all_confidences else 0
         confidence_score = round(avg_confidence / 100, 2)
+        if confidence_score > 1.0:
+            confidence_score = 0.95
 
         cleaned = clean_ocr_text(all_text)
 
         return {
-            "raw_text": all_text,
-            "cleaned_text": cleaned,
+            "raw_text":        all_text,
+            "cleaned_text":    cleaned,
             "confidence_score": confidence_score,
-            "word_count": len(cleaned.split()),
-            "pages": len(images),
-            "source": "pdf"
+            "word_count":      len(cleaned.split()),
+            "pages":           len(images),
+            "source":          "pdf"
         }
 
     except Exception as e:
         return {
-            "error": str(e),
-            "raw_text": "",
-            "cleaned_text": "",
+            "error":           str(e),
+            "raw_text":        "",
+            "cleaned_text":    "",
             "confidence_score": 0.0,
-            "word_count": 0,
-            "source": "pdf"
+            "word_count":      0,
+            "source":          "pdf"
         }
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TEXT CLEANING
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def clean_ocr_text(text: str) -> str:
     """
@@ -192,8 +316,6 @@ def clean_ocr_text(text: str) -> str:
     Removes empty lines, fixes common OCR mistakes,
     and normalizes whitespace.
     """
-
-    # Remove empty lines
     lines = text.split("\n")
     non_empty_lines = [line.strip() for line in lines if line.strip()]
     cleaned = "\n".join(non_empty_lines)
