@@ -1057,4 +1057,3 @@ def delete_expense(
         "message": f"Expense {expense_id} deleted successfully.",
     }
 
-
