@@ -220,10 +220,17 @@ def run_full_pipeline(
         db=db,
     )
 
-    # Stage 7 — Status
+    # Stage 7 — Status (stricter — more goes to pending)
+    ocr_conf = ocr_result.get("confidence_score", 0)
+    
+    # Flag suspiciously perfect OCR (AI-generated receipts often have 95%+ confidence)
+    suspiciously_perfect = ocr_conf >= 0.95 and not extracted_data.get("gstin")
+
     expense_status = (
         "pending_verification"
-        if fraud_result["fraud_risk_score"] >= 0.5 or fraud_result["requires_manual_review"]
+        if fraud_result["fraud_risk_score"] >= 0.4
+        or fraud_result["requires_manual_review"]
+        or suspiciously_perfect
         else "approved"
     )
 
