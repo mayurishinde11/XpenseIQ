@@ -26,46 +26,33 @@ Return ONLY a valid JSON object with these exact fields:
     "vendor_category_hint": "type of business e.g. restaurant, pharmacy, fuel station or null",
     "line_items": [
         {{
-            "description": "item name from Name of items column",
-            "quantity": numeric — look for Quantity/Qty/Nos/Pcs/Units column,
-            "unit_price": numeric — look for Rate/Price/MRP/Unit Price column,
-            "total_price": numeric — look for Amount/Total/Value column
+            "description": "item name",
+            "quantity": numeric,
+            "unit_price": numeric,
+            "total_price": numeric
         }}
     ],
     "service_charge": numeric value of service charge if present or null,
-    "extra_charges": numeric value of any other extra charges (packing, convenience etc.) or null,
+    "extra_charges": numeric value of delivery fee + platform fee + packing charge combined or null,
+    "discount_amount": numeric value of total discount deducted — always positive number or null,
     "confidence_score": a float between 0.0 and 1.0
 }}
 
 CRITICAL amount extraction rules:
-- "total_amount" MUST be the FINAL payable amount — the LARGEST bottom-line total on the bill
-- NEVER use subtotal/taxable value as total_amount
-- For Indian GST invoices: total_amount = taxable_value + CGST + SGST + IGST combined
-- Example: Taxable=456.78, IGST=82.22 → total_amount=539.00 (NOT 456.78)
-- If the bill shows "INR 539.00" or "Grand Total 539.00" or "Total Amount 539.00" — that is total_amount
-- subtotal = the pre-tax amount (taxable value / net amount before tax)
-- tax_amount = total tax added (sum of ALL tax components: CGST + SGST + IGST + VAT etc.)
-- When in doubt: total_amount = subtotal + tax_amount
-- For food delivery bills: total_amount includes food subtotal + delivery fee + platform fee + all taxes
-- NEVER ignore delivery charges or platform fees — they are part of total_amount
-- "subtotal" for food delivery = food items total ONLY (before delivery/platform fees)
-- Look for fields labeled: "Total Paid", "Grand Total", "Bill Total", "You Pay", "Order Total"
-- The LAST and LARGEST number on the bill is almost always total_amount
-- SERVICE CHARGE must be included in total_amount — it is NOT optional
-- Formula for restaurant bills: total_amount = food subtotal + service charge + CGST + SGST
-- Example: Subtotal=1150, Service Charge=115, CGST=28.75, SGST=28.75 → total_amount=1322.50
-- Fields labeled "Service Charge", "SC", "Service Tax", "Convenience Fee" must be added to total
-- IMPORTANT: Read the ENTIRE bill before deciding total_amount — do not stop at first subtotal
-- Always scan for ALL extra charges: service charge, packing charge, convenience fee, delivery fee
-- Add ALL of them to arrive at final total_amount
-- tax_amount = sum of CGST + SGST + IGST + VAT only — do NOT include service charge in tax_amount
+- "total_amount" MUST be the FINAL payable amount shown at the bottom of the bill
+- Look for: "Total Paid", "Grand Total", "Net Payable", "Bill Total", "You Pay", "Amount Due"
+- That bottom-line number IS total_amount — extract it directly, do not recalculate
+- subtotal = food/item total ONLY before any additions or deductions
+- tax_amount = sum of ALL tax lines (CGST + SGST + IGST + VAT + GST on delivery)
+- service_charge = service charge amount only
+- extra_charges = delivery fee + platform fee + packing charge + convenience fee (sum all)
+- discount_amount = total discount/offer deducted (positive number e.g. 87.50 not -87.50)
+- Formula check: subtotal - discount + extra_charges + service_charge + tax_amount = total_amount
 
 Line item extraction rules:
-- The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
-- The unit price column may be labeled: Rate, Price, MRP, Unit Price, Rate Rs
-- The amount column may be labeled: Amount, Total, Value, Net Amount
-- Always extract the actual number from the Quantity column, never default to 1
-- If quantity column exists but value is missing for a row, use 1
+- Quantity column: Quantity, Qty, Nos, Pcs, Units
+- Unit price column: Rate, Price, MRP, Unit Price
+- Amount column: Amount, Total, Value, Net Amount
 - unit_price x quantity should approximately equal total_price
 
 {ocr_text}
@@ -85,69 +72,84 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             response_text = response_text.strip()
         extracted_data = json.loads(response_text)
 
-        # ── Post-processing: fix total_amount if AI still got it wrong ──────
-        # Add service charge if AI missed it
-        service_charge = extracted_data.get("service_charge") or 0
-        if service_charge == 0:
-            import re as _re3
-            sc_match = _re3.search(
-                r'service\s*charge[^\d]*([\d,]+\.?\d*)', ocr_text.lower()
+        # ── Post-processing: fix total_amount ──────────────────────────────
+        import re as _re
+
+        sub      = extracted_data.get("subtotal") or 0
+        tax      = extracted_data.get("tax_amount") or 0
+        sc       = extracted_data.get("service_charge") or 0
+        extra    = extracted_data.get("extra_charges") or 0
+        discount = extracted_data.get("discount_amount") or 0
+        ai_total = extracted_data.get("total_amount") or 0
+
+        # Step 1: Extract missing values from OCR text
+        if sc == 0:
+            m = _re.search(r'service\s*charge[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
+            if m:
+                try: sc = float(m.group(1).replace(",", ""))
+                except: sc = 0
+
+        if discount == 0:
+            m = _re.search(
+                r'(?:discount|zomato gold|swiggy one|coupon|savings|offer)[^\d]*([\d,]+\.?\d*)',
+                ocr_text.lower()
             )
-            if sc_match:
-                try:
-                    service_charge = float(sc_match.group(1).replace(",", ""))
-                except ValueError:
-                    service_charge = 0
+            if m:
+                try: discount = float(m.group(1).replace(",", ""))
+                except: discount = 0
 
-        if service_charge > 0:
-            current_total = extracted_data.get("total_amount") or 0
-            sub_check = extracted_data.get("subtotal") or 0
-            tax_check = extracted_data.get("tax_amount") or 0
-            extra = extracted_data.get("extra_charges") or 0
-            expected_with_sc = round(sub_check + service_charge + extra + tax_check, 2)
-            if abs(current_total - expected_with_sc) > 1.0:
-                extracted_data["total_amount"] = expected_with_sc
-                print(f"SERVICE CHARGE FIX: added sc={service_charge} extra={extra} → new total {expected_with_sc}")
+        if extra == 0:
+            delivery = 0
+            platform = 0
+            packing  = 0
+            m = _re.search(r'delivery\s*(?:fee|charge)[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
+            if m:
+                try: delivery = float(m.group(1).replace(",", ""))
+                except: delivery = 0
+            m = _re.search(r'platform\s*fee[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
+            if m:
+                try: platform = float(m.group(1).replace(",", ""))
+                except: platform = 0
+            m = _re.search(r'packing\s*(?:fee|charge)[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
+            if m:
+                try: packing = float(m.group(1).replace(",", ""))
+                except: packing = 0
+            extra = delivery + platform + packing
 
-        # Scan raw OCR for largest currency amount first
-        import re as _re2
-        all_amounts = _re2.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)', ocr_text.lower())
-        if all_amounts:
-            parsed = []
-            for a in all_amounts:
-                try:
-                    parsed.append(float(a.replace(",", "")))
-                except ValueError:
-                    pass
-            if parsed:
-                ocr_max = max(parsed)
-                ai_total = extracted_data.get("total_amount") or 0
-                if ocr_max > ai_total and ocr_max < ai_total * 2.5:
-                    extracted_data["total_amount"] = ocr_max
+        # Step 2: Find all currency amounts in OCR
+        all_amounts = _re.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.\d{2})', ocr_text.lower())
+        parsed_amounts = []
+        for a in all_amounts:
+            try: parsed_amounts.append(float(a.replace(",", "")))
+            except: pass
 
-        total  = extracted_data.get("total_amount") or 0
-        sub    = extracted_data.get("subtotal") or 0
-        tax    = extracted_data.get("tax_amount") or 0
+        # Step 3: Calculate expected total from components
+        if sub > 0:
+            expected = round(sub - discount + extra + sc + tax, 2)
+        else:
+            expected = 0
 
-        # If subtotal + tax = a number larger than total, AI used subtotal as total
-        if sub > 0 and tax > 0:
-            expected_total = round(sub + tax, 2)
-            if abs(expected_total - total) > 0.5:          # mismatch of more than 50p
-                extracted_data["total_amount"] = expected_total
+        ocr_max = max(parsed_amounts) if parsed_amounts else 0
 
-        # If total < subtotal, something is definitely wrong — use subtotal+tax
-        if sub > 0 and total < sub:
-            extracted_data["total_amount"] = round(sub + (tax or 0), 2)
+        print(f"TOTAL DEBUG: ai={ai_total} sub={sub} tax={tax} sc={sc} extra={extra} discount={discount} expected={expected} ocr_max={ocr_max}")
 
-        # For food delivery / multi-charge bills (delivery fee, platform fee etc.)
-        # Re-read after all corrections and keep largest value found
-        final_total = extracted_data.get("total_amount") or 0
-        recalc = round((sub or 0) + (tax or 0), 2)
-        # If recalc is larger, AI missed extra charges — use recalc
-        # If final_total is larger, it includes delivery/platform fees — keep it
-        extracted_data["total_amount"] = max(final_total, recalc)
-        
+        # Step 4: Pick best total
+        # Priority: expected calculation > OCR max > AI total
+        if expected > 0 and abs(expected - ai_total) > 1.0:
+            # Our calculation differs from AI — trust our math
+            extracted_data["total_amount"] = expected
+            print(f"TOTAL FIX (calc): {ai_total} → {expected}")
+        elif ocr_max > 0 and ocr_max > ai_total and ocr_max < ai_total * 2.0:
+            # OCR found a larger reasonable amount
+            extracted_data["total_amount"] = ocr_max
+            print(f"TOTAL FIX (ocr): {ai_total} → {ocr_max}")
+        elif sub > 0 and ai_total < sub:
+            # Total is less than subtotal — definitely wrong
+            extracted_data["total_amount"] = round(sub + tax + sc + extra - discount, 2)
+            print(f"TOTAL FIX (sub>total): {ai_total} → {extracted_data['total_amount']}")
+
         return {"status": "success", "data": extracted_data}
+
     except json.JSONDecodeError as e:
         return {"status": "error", "error": f"Failed to parse AI response: {str(e)}"}
     except Exception as e:
@@ -243,10 +245,6 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 
 
 def generate_insights(expenses: list) -> dict:
-    """
-    Analyzes expense records and generates
-    3 simple spending insights using Groq AI.
-    """
     if not expenses:
         return {
             "status": "success",
@@ -267,7 +265,6 @@ def generate_insights(expenses: list) -> dict:
         cat = e.get("primary_category", "Unknown")
         vendor = e.get("vendor_name", "Unknown")
         amount = e.get("total_amount", 0) or 0
-
         categories[cat] = categories.get(cat, 0) + amount
         vendors[vendor] = vendors.get(vendor, 0) + amount
 
@@ -277,7 +274,6 @@ def generate_insights(expenses: list) -> dict:
 
     prompt = f"""
 You are an expense analytics assistant.
-
 Analyze this spending summary and give exactly 3 short, helpful insights.
 Each insight should be one sentence. Be specific with numbers.
 
@@ -295,10 +291,8 @@ Return ONLY a valid JSON object:
         "insight 3 with specific numbers"
     ]
 }}
-
 Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
-
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -306,17 +300,13 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
             temperature=0.3,
             max_tokens=300
         )
-
         response_text = response.choices[0].message.content.strip()
-
         if response_text.startswith("```"):
             response_text = re.sub(r'^```[a-z]*\n?', '', response_text)
             response_text = re.sub(r'\n?```$', '', response_text)
             response_text = response_text.strip()
-
         data = json.loads(response_text)
         return {"status": "success", "data": data}
-
     except Exception as e:
         return {
             "status": "error",
