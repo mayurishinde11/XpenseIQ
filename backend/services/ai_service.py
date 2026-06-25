@@ -60,7 +60,7 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=1500
@@ -164,7 +164,7 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         # Retry once with stricter prompt
         try:
             retry_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {"role": "user", "content": f"Extract expense data from this text and return ONLY valid JSON with no special characters in string values:\n\n{ocr_text[:2000]}"}
                 ],
@@ -221,7 +221,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=500
@@ -258,7 +258,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1000
@@ -325,7 +325,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=300
