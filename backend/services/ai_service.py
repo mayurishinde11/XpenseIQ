@@ -40,14 +40,19 @@ Return ONLY a valid JSON object with these exact fields:
 
 CRITICAL amount extraction rules:
 - "total_amount" MUST be the FINAL payable amount shown at the bottom of the bill
-- Look for: "Total Paid", "Grand Total", "Net Payable", "Bill Total", "You Pay", "Amount Due"
+- Look for: "Total Paid", "Grand Total", "Net Payable", "Bill Total", "You Pay", "Amount Due", "TOTAL PAID"
 - That bottom-line number IS total_amount — extract it directly, do not recalculate
 - subtotal = food/item total ONLY before any additions or deductions
-- tax_amount = sum of ALL tax lines (CGST + SGST + IGST + VAT + GST on delivery)
+- tax_amount = sum of ALL tax lines combined:
+  * Add CGST + SGST + IGST + VAT together
+  * Add "GST on food" + "GST on Delivery" together — these are SEPARATE lines, both must be included
+  * Example: GST(5%)=43.75 AND "GST on Delivery(18%)"=5.22 means tax_amount = 43.75 + 5.22 = 48.97
+  * NEVER skip "GST on Delivery" line — it is always a small separate amount
 - service_charge = service charge amount only
 - extra_charges = delivery fee + platform fee + packing charge + convenience fee (sum all)
-- discount_amount = total discount/offer deducted (positive number e.g. 87.50 not -87.50)
-- Formula check: subtotal - discount + extra_charges + service_charge + tax_amount = total_amount
+- discount_amount = total discount (always positive e.g. 87.50 not -87.50)
+- "Zomato Gold Discount", "Swiggy One", "Coupon", "Offer", "Savings" = discount_amount
+- Formula: subtotal - discount_amount + extra_charges + service_charge + tax_amount = total_amount
 
 Line item extraction rules:
 - Quantity column: Quantity, Qty, Nos, Pcs, Units
@@ -70,19 +75,16 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
             response_text = re.sub(r'^```[a-z]*\n?', '', response_text)
             response_text = re.sub(r'\n?```$', '', response_text)
             response_text = response_text.strip()
-        # Clean common JSON-breaking characters from response
         response_text = response_text.replace('\t', ' ')
-        # Fix unescaped quotes inside string values
         try:
             extracted_data = json.loads(response_text)
         except json.JSONDecodeError:
-            # Try aggressive cleaning
             response_text = re.sub(r'[\x00-\x1f\x7f]', ' ', response_text)
             response_text = re.sub(r',\s*}', '}', response_text)
             response_text = re.sub(r',\s*]', ']', response_text)
             extracted_data = json.loads(response_text)
 
-        # ── Post-processing: fix total_amount ──────────────────────────────
+        # ── Post-processing ────────────────────────────────────────────────
         import re as _re
 
         sub      = extracted_data.get("subtotal") or 0
@@ -92,13 +94,14 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
         discount = extracted_data.get("discount_amount") or 0
         ai_total = extracted_data.get("total_amount") or 0
 
-        # Step 1: Extract missing values from OCR text
+        # Step 1: Extract missing service charge from OCR
         if sc == 0:
             m = _re.search(r'service\s*charge[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
             if m:
                 try: sc = float(m.group(1).replace(",", ""))
                 except: sc = 0
 
+        # Step 2: Extract missing discount from OCR
         if discount == 0:
             m = _re.search(
                 r'(?:discount|zomato gold|swiggy one|coupon|savings|offer)[^\d]*([\d,]+\.?\d*)',
@@ -108,10 +111,9 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
                 try: discount = float(m.group(1).replace(",", ""))
                 except: discount = 0
 
+        # Step 3: Extract missing extra charges from OCR
         if extra == 0:
-            delivery = 0
-            platform = 0
-            packing  = 0
+            delivery, platform, packing = 0, 0, 0
             m = _re.search(r'delivery\s*(?:fee|charge)[^\d]*([\d,]+\.?\d*)', ocr_text.lower())
             if m:
                 try: delivery = float(m.group(1).replace(",", ""))
@@ -126,63 +128,55 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
                 except: packing = 0
             extra = delivery + platform + packing
 
-        # Step 2: Find all currency amounts in OCR
-        all_amounts = _re.findall(r'(?:rs\.?|inr|₹)\s*([\d,]+\.\d{2})', ocr_text.lower())
+        # Step 4: Re-sum ALL tax lines from OCR to catch missed lines like GST on Delivery
+        tax_lines = _re.findall(
+            r'(?:cgst|sgst|igst|gst|vat|cess)[^\d]*([\d]+\.[\d]{2})',
+            ocr_text.lower()
+        )
+        if tax_lines:
+            tax_sum = 0
+            for t in tax_lines:
+                try:
+                    val = float(t)
+                    if 0 < val < 200:  # valid tax range — avoids OCR misreads like 522 for 5.22
+                        tax_sum += val
+                except:
+                    pass
+            if tax_sum > 0 and abs(tax_sum - tax) > 0.5:
+                print(f"TAX FIX: {tax} -> {round(tax_sum, 2)} from lines: {tax_lines}")
+                tax = round(tax_sum, 2)
+                extracted_data["tax_amount"] = tax
+
+        # Step 5: Find all currency amounts in OCR for reference
+        all_amounts = _re.findall(r'(?:rs\.?|Rs|INR|inr)\s*([\d,]+\.\d{2})', ocr_text)
         parsed_amounts = []
         for a in all_amounts:
             try: parsed_amounts.append(float(a.replace(",", "")))
             except: pass
+        ocr_max = max(parsed_amounts) if parsed_amounts else 0
 
-        # Step 3: Calculate expected total from components
+        # Step 6: Calculate expected total from all components
         if sub > 0:
             expected = round(sub - discount + extra + sc + tax, 2)
         else:
             expected = 0
 
-        ocr_max = max(parsed_amounts) if parsed_amounts else 0
-
-        # Fix tax_amount — if AI total < subtotal, AI may have missed some tax lines
-        # Re-sum tax from OCR: find all small amounts that look like tax
-        if sub > 0 and tax > 0:
-            # Check if there are additional tax lines missed by AI
-            tax_lines = _re.findall(
-                r'(?:cgst|sgst|igst|gst|vat|cess)[^\d]*([\d]+\.[\d]{2})',
-                ocr_text.lower()
-            )
-            if tax_lines:
-                tax_sum = 0
-                for t in tax_lines:
-                    try:
-                        val = float(t)
-                        if val < 500:  # ignore OCR misreads like 522 for 5.22
-                            tax_sum += val
-                    except:
-                        pass
-                if tax_sum > tax:
-                    tax = round(tax_sum, 2)
-                    extracted_data["tax_amount"] = tax
-
-        # Recalculate expected with corrected tax
-        if sub > 0:
-            expected = round(sub - discount + extra + sc + tax, 2)
-
         print(f"TOTAL DEBUG: ai={ai_total} sub={sub} tax={tax} sc={sc} extra={extra} discount={discount} expected={expected} ocr_max={ocr_max}")
 
-        # Step 4: Pick best total
-        if expected > 0 and abs(expected - ai_total) > 1.0:
+        # Step 7: Pick the best total
+        if expected > 0 and abs(expected - ai_total) > 0.5:
             extracted_data["total_amount"] = expected
-            print(f"TOTAL FIX (calc): {ai_total} → {expected}")
+            print(f"TOTAL FIX (calc): {ai_total} -> {expected}")
         elif ocr_max > 0 and ocr_max > ai_total and ocr_max < ai_total * 2.0:
             extracted_data["total_amount"] = ocr_max
-            print(f"TOTAL FIX (ocr): {ai_total} → {ocr_max}")
+            print(f"TOTAL FIX (ocr): {ai_total} -> {ocr_max}")
         elif sub > 0 and ai_total < sub:
             extracted_data["total_amount"] = round(sub + tax + sc + extra - discount, 2)
-            print(f"TOTAL FIX (sub>total): {ai_total} → {extracted_data['total_amount']}")
+            print(f"TOTAL FIX (sub>total): {ai_total} -> {extracted_data['total_amount']}")
 
         return {"status": "success", "data": extracted_data}
 
     except json.JSONDecodeError as e:
-        # Retry once with stricter prompt
         try:
             retry_response = client.chat.completions.create(
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
