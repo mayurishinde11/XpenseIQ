@@ -346,7 +346,8 @@ async def scan_receipt(
 
     new_expense = build_expense_object(
         user_id=current_user.id,
-        expense_status=expense_status,
+        status=expense_status,
+        approved_by="XpenseIQ System" if expense_status == "approved" else None,
         extracted_data=extracted_data,
         classification=classification,
         fraud_result=fraud_result,
@@ -756,6 +757,7 @@ def get_all_expenses(
                 "confidence_score":      e.confidence_score,
                 "receipt_number":        e.receipt_number,
                 "status":                e.status,
+                "approved_by":           e.approved_by,
                 "created_at":            str(e.created_at),
             }
             for e in expenses
@@ -898,6 +900,7 @@ def approve_expense(
         raise HTTPException(status_code=400, detail="Expense is already approved.")
 
     expense.status = "approved"
+    expense.approved_by = current_user.full_name or current_user.email
     db.commit()
     db.refresh(expense)
 

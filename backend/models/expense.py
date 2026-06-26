@@ -59,6 +59,7 @@ class Expense(Base):
     # pending_verification = suspicious, awaiting review
     # rejected = rejected by admin, excluded from totals
     status = Column(String, default="approved", nullable=False)
+    approved_by = Column(String, nullable=True)
  
     # When this record was created in our system
     created_at = Column(DateTime(timezone=True), server_default=func.now())
