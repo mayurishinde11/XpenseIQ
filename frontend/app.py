@@ -223,22 +223,29 @@ def show_dashboard():
 
     # Load data
     try:
-        summary = requests.get(
-            f"{BACKEND_URL}/expenses/summary", headers=get_headers()
-        ).json()
-        all_expenses = requests.get(
-            f"{BACKEND_URL}/expenses/", headers=get_headers()
-        ).json().get("expenses", [])
-        pending_expenses = requests.get(
-            f"{BACKEND_URL}/expenses/pending", headers=get_headers()
-        ).json().get("expenses", [])
-        rejected_expenses = requests.get(
-            f"{BACKEND_URL}/expenses/",
-            headers=get_headers(),
-            params={"status": "rejected"}
-        ).json().get("expenses", [])
+        summary_r = requests.get(f"{BACKEND_URL}/expenses/summary", headers=get_headers(), timeout=10)
+        all_r     = requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), timeout=10)
+        pending_r = requests.get(f"{BACKEND_URL}/expenses/pending", headers=get_headers(), timeout=10)
+        rejected_r= requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), params={"status": "rejected"}, timeout=10)
+
+        if summary_r.status_code == 401:
+            st.warning("Session expired. Please login again.")
+            for k in ["token", "user_id", "email", "full_name"]:
+                st.session_state[k] = None
+            st.rerun()
+            return
+
+        summary          = summary_r.json()
+        all_expenses     = all_r.json().get("expenses", [])
+        pending_expenses = pending_r.json().get("expenses", [])
+        rejected_expenses= rejected_r.json().get("expenses", [])
+    except requests.exceptions.Timeout:
+        st.error("Backend is taking too long to respond. Please try again.")
+        return
     except Exception as e:
         st.error(f"Could not load dashboard: {str(e)}")
+        if st.button("Retry"):
+            st.rerun()
         return
 
     # Empty state
@@ -497,7 +504,7 @@ def show_dashboard():
         rows = ""
         for e in high_risk:
             risk = e.get("fraud_risk_score", 0) or 0
-            risk_color = "#EF4444" if risk >= 0.7 else "#F59E0B" if risk >= 0.5 else "#8A6D7C"
+            risk_color = "#EF4444" if risk >= 0.70 else "#F59E0B" if risk >= 0.30 else "#8A6D7C"
             rows += f"""
             <tr style="border-bottom:1px solid #F3D6E0;">
               <td style="padding:10px 12px;font-weight:500;color:#2D1B2E;font-size:12px;">
@@ -949,9 +956,9 @@ def show_scan_page():
                     </div>
                     """, unsafe_allow_html=True)
 
-                    risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
-                    risk_label = "HIGH RISK" if risk >= 0.5 else "MEDIUM" if risk >= 0.3 else "LOW RISK"
-                    risk_bg = "#fff5f5" if risk >= 0.5 else "#fffbf0" if risk >= 0.3 else "#f5edfb"
+                    risk_color = "#EC105C" if risk >= 0.70 else "#c2410c" if risk >= 0.31 else "#8E40B0"
+                    risk_label = "HIGH RISK" if risk >= 0.70 else "MEDIUM" if risk >= 0.31 else "LOW RISK"
+                    risk_bg = "#fff5f5" if risk >= 0.70 else "#fffbf0" if risk >= 0.31 else "#f5edfb"
                     flags = fraud.get("fraud_flags", [])
                     flags_html = "".join(
                         f'<div style="font-size:11px;color:#AA225B;padding:2px 0;">• {f}</div>'
@@ -1212,6 +1219,8 @@ def show_expenses_page():
                            color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Status</th>
                       <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
                            color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Payment</th>
+                      <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                           color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Approved By</th>
                     </tr>
                   </thead>
                   <tbody>{rows_html}</tbody>
@@ -1277,8 +1286,7 @@ def show_pending_page():
     risk_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for e in expenses:
         risk = e.get("fraud_risk_score", 0) or 0
-        risk_counts["HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"] += 1
-
+        risk_counts["HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.30 else "LOW"] += 1
     col_h, col_m, col_l = st.columns(3, gap="large")
 
     with col_h:
@@ -1336,7 +1344,7 @@ def show_pending_page():
         expense_id = expense.get("id")
         risk = expense.get("fraud_risk_score", 0) or 0
         flags = expense.get("fraud_flags", [])
-        risk_label = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"
+        risk_label = "HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.30 else "LOW"
         risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
         confirm_key = f"confirm_{expense_id}"
 
@@ -1354,9 +1362,9 @@ def show_pending_page():
                 st.write("**Date:**", expense.get("transaction_date", "—"))
 
             with col2:
-                if risk >= 0.7:
+                if risk >= 0.70:
                     st.error(f"🔴 Fraud Risk: {risk:.2f} — {risk_label}")
-                elif risk >= 0.5:
+                elif risk >= 0.30:
                     st.warning(f"🟡 Fraud Risk: {risk:.2f} — {risk_label}")
                 else:
                     st.info(f"🟢 Fraud Risk: {risk:.2f} — {risk_label}")
@@ -1860,6 +1868,9 @@ def show_reports_page():
                   </td>
                   <td style="padding:14px 16px;vertical-align:middle;">
                     <div style="font-size:12px;color:#8A6D7C;">{payment}</div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    {'<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 ' + row.get("approved_by") + '</div>' if row.get("approved_by") == "XpenseIQ System" else '<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 ' + row.get("approved_by") + '</div>' if row.get("approved_by") else '<div style="font-size:12px;color:#8A6D7C;">—</div>'}
                   </td>
                 </tr>"""
 
