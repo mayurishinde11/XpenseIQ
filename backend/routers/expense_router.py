@@ -336,7 +336,10 @@ async def scan_receipt(
     )
 
     if not pipeline["success"]:
-        raise HTTPException(status_code=422, detail=pipeline["error"])
+        raise HTTPException(
+            status_code=422,
+            detail=pipeline["error"] or "Processing failed. Please try again in a few seconds."
+        )
 
     extracted_data  = pipeline["extracted_data"]
     classification  = pipeline["classification"]

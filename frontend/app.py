@@ -864,6 +864,9 @@ def show_scan_page():
                       <div style="font-size:12px;color:#742A2A;">
                         {result.get('error', 'Unknown error')}
                       </div>
+                      <div style="font-size:11px;color:#742A2A;margin-top:8px;">
+                        💡 This may be a temporary issue. Please try uploading again.
+                      </div>
                     </div>
                     """, unsafe_allow_html=True)
 
