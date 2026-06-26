@@ -842,7 +842,7 @@ def show_scan_page():
                            letter-spacing:.06em;margin-bottom:10px;">Document Metadata</div>
                       <table style="width:100%;font-size:12px;border-collapse:collapse;">
                         <tr><td style="color:#6D6578;padding:6px 8px;">File Type</td>
-                            <td style="font-weight:500;color:#1C1424;text-align:right;padding:6px 8px;">{ocr.get('source','image').upper()}</td></tr>
+                            <td style="font-weight:500;color:#1C1424;text-align:right;padding:6px 8px;">{"PDF" if ocr.get('source') == 'pdf' else "IMAGE"}</td></tr>
                         <tr><td style="color:#6D6578;padding:6px 8px;">Pages</td>
                             <td style="font-weight:500;color:#1C1424;text-align:right;padding:6px 8px;">{ocr.get('pages',1)}</td></tr>
                         <tr><td style="color:#6D6578;padding:6px 8px;">Words Extracted</td>
