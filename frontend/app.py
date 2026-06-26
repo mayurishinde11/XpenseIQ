@@ -1735,17 +1735,22 @@ def show_reports_page():
                       Spend by Category
                     </div>
                     """, unsafe_allow_html=True)
-                    st.dataframe(
-                        df_cat,
-                        use_container_width=True,
-                        hide_index=True,
-                        height=180,
-                        column_config={
-                            "Category": st.column_config.TextColumn("Category", width="large"),
-                            "Amount (Rs)": st.column_config.NumberColumn("Amount (Rs)", format="%.0f"),
-                            "Share": st.column_config.TextColumn("Share", width="small"),
-                        }
-                    )
+                    cat_rows = ""
+                    for _, r in df_cat.iterrows():
+                        cat_rows += f"""<tr style="border-bottom:1px solid #F3D6E0;">
+                            <td style="padding:8px 12px;font-size:12px;color:#2D1B2E;">{r['Category']}</td>
+                            <td style="padding:8px 12px;font-size:12px;color:#E91E63;font-weight:600;">Rs {r['Amount (Rs)']:,.0f}</td>
+                            <td style="padding:8px 12px;font-size:12px;color:#8A6D7C;">{r['Share']}</td>
+                        </tr>"""
+                    st.markdown(f"""
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+                        <thead><tr style="background:#FCF7F9;">
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;">Category</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;">Amount (Rs)</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;">Share</th>
+                        </tr></thead>
+                        <tbody>{cat_rows}</tbody>
+                    </table>""", unsafe_allow_html=True)
                     import altair as alt
                     st.altair_chart(
                         alt.Chart(df_cat).mark_bar(
@@ -1784,18 +1789,20 @@ def show_reports_page():
                       Top 5 Vendors
                     </div>
                     """, unsafe_allow_html=True)
-                    st.dataframe(
-                        top_v,
-                        use_container_width=True,
-                        hide_index=True,
-                        height=180,
-                        column_config={
-                            "Vendor": st.column_config.TextColumn("Vendor", width="large"),
-                            "Total Spend (Rs)": st.column_config.NumberColumn(
-                                "Total Spend (Rs)", format="%.0f"
-                            ),
-                        }
-                    )
+                    vendor_rows = ""
+                    for _, r in top_v.iterrows():
+                        vendor_rows += f"""<tr style="border-bottom:1px solid #F3D6E0;">
+                            <td style="padding:8px 12px;font-size:12px;color:#2D1B2E;">{r['Vendor']}</td>
+                            <td style="padding:8px 12px;font-size:12px;color:#E91E63;font-weight:600;">Rs {r['Total Spend (Rs)']:,.0f}</td>
+                        </tr>"""
+                    st.markdown(f"""
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+                        <thead><tr style="background:#FCF7F9;">
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;">Vendor</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;">Total Spend (Rs)</th>
+                        </tr></thead>
+                        <tbody>{vendor_rows}</tbody>
+                    </table>""", unsafe_allow_html=True)
                     import altair as alt
                     st.altair_chart(
                         alt.Chart(top_v).mark_bar(
