@@ -181,6 +181,20 @@ def run_full_pipeline(
                        "cash", "upi", "card", "paid", "balance due"]
     has_receipt_word = any(kw in ocr_text for kw in receipt_keywords)
 
+    # Reject resumes, CVs, and non-invoice documents
+    non_invoice_keywords = [
+        "resume", "curriculum vitae", "cv", "objective", "education",
+        "experience", "skills", "references", "internship", "university",
+        "college", "degree", "bachelor", "master", "project", "linkedin",
+        "github", "hobbies", "declaration", "hereby declare"
+    ]
+    is_resume = sum(1 for kw in non_invoice_keywords if kw in ocr_text) >= 3
+    if is_resume:
+        return {
+            "success": False,
+            "error": "This file appears to be a resume or CV, not a receipt or invoice. Please upload a valid bill.",
+        }
+
     if not has_receipt_word and not total_amount:
         return {
             "success": False,
@@ -191,6 +205,13 @@ def run_full_pipeline(
         return {
             "success": False,
             "error": "Could not find any amount in this file. Please upload a valid receipt.",
+        }
+
+    # Reject if total amount is suspiciously low (less than Rs 5)
+    if total_amount and total_amount < 5:
+        return {
+            "success": False,
+            "error": "Amount too low to be a valid bill. Please upload a valid receipt.",
         }
 
     total_amount = total_amount or 0.0
