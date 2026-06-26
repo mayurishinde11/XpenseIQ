@@ -1161,7 +1161,7 @@ def show_expenses_page():
                 if approved_by == "XpenseIQ System":
                     approved_html = '<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 XpenseIQ System</div>'
                 elif approved_by:
-                    approved_html = f'<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 {approved_by}</div>'
+                    approved_html = f'<div style="font-size:12px;color:#22C55E;font-weight:600;"> {approved_by}</div>'
                 else:
                     approved_html = '<div style="font-size:12px;color:#8A6D7C;"> XpenseIQ System</div>'
 
