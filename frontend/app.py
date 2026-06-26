@@ -1150,6 +1150,20 @@ def show_expenses_page():
                 status_bg = "#ECFDF5" if status.lower() == "approved" else "#FCF0F5"
                 risk = row.get("fraud_risk_score", 0) or 0
                 risk_pct = int(risk * 100)
+                import math
+                approved_by_raw = row.get("approved_by")
+                # Handle None, empty string, and pandas NaN
+                if approved_by_raw is None or approved_by_raw == "" or (isinstance(approved_by_raw, float) and math.isnan(approved_by_raw)):
+                    approved_by = ""
+                else:
+                    approved_by = str(approved_by_raw).strip()
+
+                if approved_by == "XpenseIQ System":
+                    approved_html = '<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 XpenseIQ System</div>'
+                elif approved_by:
+                    approved_html = f'<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 {approved_by}</div>'
+                else:
+                    approved_html = '<div style="font-size:12px;color:#8A6D7C;"> XpenseIQ System</div>'
 
                 if risk >= 0.7:
                     risk_label = "High Risk"
@@ -1196,6 +1210,9 @@ def show_expenses_page():
                   </td>
                   <td style="padding:14px 16px;vertical-align:middle;">
                     <div style="font-size:12px;color:#8A6D7C;">{payment}</div>
+                  </td>
+                  <td style="padding:14px 16px;vertical-align:middle;">
+                    {approved_html}
                   </td>
                 </tr>"""
 
@@ -1870,7 +1887,13 @@ def show_reports_page():
                     <div style="font-size:12px;color:#8A6D7C;">{payment}</div>
                   </td>
                   <td style="padding:14px 16px;vertical-align:middle;">
-                    {'<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 ' + row.get("approved_by") + '</div>' if row.get("approved_by") == "XpenseIQ System" else '<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 ' + row.get("approved_by") + '</div>' if row.get("approved_by") else '<div style="font-size:12px;color:#8A6D7C;">—</div>'}
+                    {
+                        ('<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 XpenseIQ System</div>'
+                         if row.get("approved_by") == "XpenseIQ System"
+                         else '<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 ' + str(row.get("approved_by", "")) + '</div>'
+                         if row.get("approved_by")
+                         else '<div style="font-size:12px;color:#8A6D7C;">—</div>')
+                    }
                   </td>
                 </tr>"""
 
