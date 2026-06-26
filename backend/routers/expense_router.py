@@ -349,13 +349,13 @@ async def scan_receipt(
 
     new_expense = build_expense_object(
         user_id=current_user.id,
-        status=expense_status,
-        approved_by="XpenseIQ System" if expense_status == "approved" else None,
+        expense_status=expense_status,
         extracted_data=extracted_data,
         classification=classification,
         fraud_result=fraud_result,
         ocr_result=ocr_result,
     )
+    new_expense.approved_by = "XpenseIQ System" if expense_status == "approved" else None
 
     db.add(new_expense)
     db.commit()
