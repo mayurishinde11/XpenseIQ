@@ -142,8 +142,12 @@ def show_main_app():
         col_a, col_b, col_c = st.columns([1, 2, 1])
         with col_b:
             st.image("logo.png", use_container_width=True)
-        st.title("XpenseIQ")
-        st.write(f"Welcome, **{get_display_name()}**")
+        st.markdown(f"""
+        <div style="margin-top:-20px;">
+            <div style="font-size:20px;font-weight:700;color:#2D1B2E;">XpenseIQ</div>
+            <div style="font-size:13px;color:#8A6D7C;">Welcome, <b>{get_display_name()}</b></div>
+        </div>
+        """, unsafe_allow_html=True)
         st.divider()
         pages = [
             ("Dashboard", "dashboard"),
