@@ -1846,7 +1846,18 @@ def show_reports_page():
                 payment = row.get("payment_method", "—") or "—"
                 risk = row.get("fraud_risk_score", 0) or 0
                 risk_pct = int(risk * 100)
-
+                import math
+                approved_by_raw = row.get("approved_by")
+                if approved_by_raw is None or approved_by_raw == "" or (isinstance(approved_by_raw, float) and math.isnan(approved_by_raw)):
+                    approved_by = ""
+                else:
+                    approved_by = str(approved_by_raw).strip()
+                if approved_by == "XpenseIQ System":
+                    approved_html = '<div style="font-size:12px;color:#8A6D7C;font-weight:500;">🤖 XpenseIQ System</div>'
+                elif approved_by:
+                    approved_html = f'<div style="font-size:12px;color:#8A6D7C;font-weight:500;">👤 {approved_by}</div>'
+                else:
+                    approved_html = '<div style="font-size:12px;color:#8A6D7C;font-weight:500;">🤖 XpenseIQ System</div>'
                 if risk >= 0.7:
                     risk_label = "High Risk"
                     risk_color = "#991B1B"
@@ -1898,9 +1909,9 @@ def show_reports_page():
                   </td>
                   <td style="padding:14px 16px;vertical-align:middle;">
                     {
-                        ('<div style="font-size:12px;color:#8E40B0;font-weight:500;">🤖 XpenseIQ System</div>'
+                        ('<div style="font-size:12px;color:#8E40B0;font-weight:500;"> XpenseIQ System</div>'
                          if row.get("approved_by") == "XpenseIQ System"
-                         else '<div style="font-size:12px;color:#22C55E;font-weight:600;">👤 ' + str(row.get("approved_by", "")) + '</div>'
+                         else '<div style="font-size:12px;color:#22C55E;font-weight:600;"> ' + str(row.get("approved_by", "")) + '</div>'
                          if row.get("approved_by")
                          else '<div style="font-size:12px;color:#8A6D7C;">—</div>')
                     }
@@ -1928,6 +1939,8 @@ def show_reports_page():
                          color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Status</th>
                     <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
                          color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Payment</th>
+                    <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;
+                         color:#8A6D7C;text-transform:uppercase;letter-spacing:.08em;">Approved By</th>
                   </tr>
                 </thead>
                 <tbody>{rows_html}</tbody>
