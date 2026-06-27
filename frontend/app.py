@@ -677,6 +677,9 @@ def show_scan_page():
         border: 2px dashed #E91E63 !important;
         border-radius: 12px !important;
     }
+    section[data-testid="stSidebar"] img {
+        margin-bottom: -30px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
