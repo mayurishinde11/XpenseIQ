@@ -151,7 +151,14 @@ def run_full_pipeline(
             "success": False,
             "error": "Could not extract enough text. Please upload a clearer image.",
         }
-
+    # Stage 2B — Check OCR confidence
+    ocr_conf = ocr_result.get("confidence_score", 0)
+    if ocr_conf <= 0.30:
+        return {
+            "success": False,
+            "error": f"Image is too blurry or unclear (OCR confidence: {int(ocr_conf*100)}%). "
+                     f"Please upload a clearer photo of the bill."
+        }
     # Stage 3 — AI Extraction
     ai_result = extract_expense_data(ocr_result["cleaned_text"])
     if ai_result["status"] == "error":
@@ -247,11 +254,15 @@ def run_full_pipeline(
     # Flag suspiciously perfect OCR (AI-generated receipts often have 95%+ confidence)
     suspiciously_perfect = ocr_conf >= 0.95 and not extracted_data.get("gstin")
 
+    # Blurry bill — low confidence means amount cannot be trusted
+    blurry_bill = 0.30 < ocr_conf < 0.70
+
     expense_status = (
         "pending_verification"
         if fraud_result["fraud_risk_score"] >= 0.4
         or fraud_result["requires_manual_review"]
         or suspiciously_perfect
+        or blurry_bill
         or (len(fraud_result.get("fraud_flags", [])) > 0 and fraud_result["fraud_risk_score"] >= 0.30)
         else "approved"
     )
@@ -349,6 +360,8 @@ async def scan_receipt(
 
     file_bytes = await file.read()
 
+    
+
     pipeline = run_full_pipeline(
         file_bytes=file_bytes,
         content_type=file.content_type,
@@ -377,6 +390,7 @@ async def scan_receipt(
         ocr_result=ocr_result,
     )
     new_expense.approved_by = "XpenseIQ System" if expense_status == "approved" else None
+    
 
     db.add(new_expense)
     db.commit()
@@ -635,9 +649,10 @@ def get_pending_expenses(
                 "transaction_date": e.transaction_date,
                 "fraud_risk_score": e.fraud_risk_score,
                 "fraud_flags":      e.fraud_flags,
-                "confidence_score": e.confidence_score,
-                "status":           e.status,
-                "created_at":       str(e.created_at),
+                "confidence_score":        e.confidence_score,
+                "status":                  e.status,
+                #"receipt_image_base64":    e.receipt_image_base64,
+                "created_at":              str(e.created_at),
             }
             for e in expenses
         ],

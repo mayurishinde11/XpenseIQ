@@ -227,10 +227,10 @@ def show_dashboard():
 
     # Load data
     try:
-        summary_r = requests.get(f"{BACKEND_URL}/expenses/summary", headers=get_headers(), timeout=10)
-        all_r     = requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), timeout=10)
-        pending_r = requests.get(f"{BACKEND_URL}/expenses/pending", headers=get_headers(), timeout=10)
-        rejected_r= requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), params={"status": "rejected"}, timeout=10)
+        summary_r = requests.get(f"{BACKEND_URL}/expenses/summary", headers=get_headers(), timeout=60)
+        all_r     = requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), timeout=60)
+        pending_r = requests.get(f"{BACKEND_URL}/expenses/pending", headers=get_headers(), timeout=60)
+        rejected_r= requests.get(f"{BACKEND_URL}/expenses/", headers=get_headers(), params={"status": "rejected"}, timeout=60)
 
         if summary_r.status_code == 401:
             st.warning("Session expired. Please login again.")
@@ -244,7 +244,11 @@ def show_dashboard():
         pending_expenses = pending_r.json().get("expenses", [])
         rejected_expenses= rejected_r.json().get("expenses", [])
     except requests.exceptions.Timeout:
-        st.error("Backend is taking too long to respond. Please try again.")
+        st.warning("⏳ Backend is waking up. Please wait and click Retry.")
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button(" Retry", type="primary"):
+                st.rerun()
         return
     except Exception as e:
         st.error(f"Could not load dashboard: {str(e)}")
@@ -812,6 +816,14 @@ def show_scan_page():
                         st.success("Approved — added to expenses")
                     else:
                         st.warning("Pending Verification — awaiting review")
+                        if st.button(
+                            "🔍 Go to Pending Verification",
+                            key=f"goto_pending_{data.get('expense_id')}",
+                            use_container_width=True,
+                            type="primary"
+                        ):
+                            st.session_state.page = "pending"
+                            st.rerun()
 
                     # Allow user to correct the total amount
                     expense_id = data.get("expense_id")
@@ -1400,7 +1412,6 @@ def show_pending_page():
 
             with col3:
                 state = st.session_state.get(confirm_key)
-
                 if state == "approve":
                     st.warning("Confirm approval?")
                     owner_email = st.text_input(

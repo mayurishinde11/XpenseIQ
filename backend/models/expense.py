@@ -60,6 +60,7 @@ class Expense(Base):
     # rejected = rejected by admin, excluded from totals
     status = Column(String, default="approved", nullable=False)
     approved_by = Column(String, nullable=True)
+    
  
     # When this record was created in our system
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -33,3 +33,25 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+import threading
+import time as _time
+import requests as _req
+import os as _os
+
+def keep_alive():
+    """Ping self every 5 minutes to prevent Railway cold start."""
+    url = _os.getenv("BACKEND_URL", "")
+    if not url:
+        return
+    while True:
+        try:
+            _time.sleep(300)  # 5 minutes
+            _req.get(f"{url}/health", timeout=10)
+            print("KEEP ALIVE: pinged successfully")
+        except Exception:
+            pass
+
+# Start keep-alive thread on startup
+threading.Thread(target=keep_alive, daemon=True).start()

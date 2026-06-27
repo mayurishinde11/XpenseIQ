@@ -101,7 +101,7 @@ def check_fraud(
             )
             fraud_risk_score += 0.30
 
-    # ── RULE 7B — Invalid GSTIN format ───────────────────────────────────────
+    # RULE 7B — Invalid GSTIN format + fake GSTIN detection
     if gstin:
         import re as _re
         valid_gstin = bool(_re.match(
@@ -112,6 +112,55 @@ def check_fraud(
                 f"Invalid GSTIN format: {gstin} — may be fake or AI-generated"
             )
             fraud_risk_score += 0.30
+        else:
+            fake_patterns = [
+                r'[A-Z]{5}1234',
+                r'AAAAA',
+                r'ABCDE',
+                r'DUMMY|DEMO|TEST|FAKE|SAMPLE|XXXXX',
+            ]
+            is_fake_gstin = any(
+                _re.search(pat, gstin, _re.IGNORECASE)
+                for pat in fake_patterns
+            )
+            if is_fake_gstin:
+                fraud_flags.append(
+                    f"Suspicious GSTIN detected: {gstin} — appears to be demo/test/fake"
+                )
+                fraud_risk_score += 0.35
+    # RULE 7B-3 — Verify GSTIN via free lookup
+    if gstin and valid_gstin:
+        try:
+            import requests as _req
+            response = _req.get(
+                f"https://sheet.gst.gov.in/files/gstin/{gstin}",
+                timeout=5
+            )
+            if response.status_code == 200:
+                gst_data = response.json()
+                status = gst_data.get("sts", "").lower()
+                trade_name = gst_data.get("tradeNam", "")
+                if "cancel" in status:
+                    fraud_flags.append(
+                        f"GSTIN {gstin} is CANCELLED — vendor '{trade_name}' inactive"
+                    )
+                    fraud_risk_score += 0.35
+                # If 200 and active — GSTIN is real ✅
+            elif response.status_code in [400, 404]:
+                fraud_flags.append(
+                    f"GSTIN {gstin} does not exist on GST portal — fake GSTIN"
+                )
+                fraud_risk_score += 0.50
+        except Exception:
+            pass  # Skip if portal unreachable — don't penalize
+    # RULE 7C — Demo/test invoice detection
+    demo_keywords = ['demo', 'test', 'sample', 'dummy', 'fake', 'example']
+    receipt_no_str = str(receipt_number or "").lower()
+    if any(kw in receipt_no_str for kw in demo_keywords):
+        fraud_flags.append(
+            f"Demo/test receipt number detected: {receipt_number}"
+        )
+        fraud_risk_score += 0.40
 
     # ── RULE 8 — AI-generated / fake invoice detection ───────────────────────
     ai_signals = 0

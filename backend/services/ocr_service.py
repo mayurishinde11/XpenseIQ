@@ -93,12 +93,29 @@ Do NOT summarize. Extract every single piece of text exactly as shown."""
             cleaned = clean_ocr_text(text)
             word_count = len(cleaned.split())
             print(f"VISION AI SUCCESS: {word_count} words extracted")
+
+            # Calculate confidence using blur detection + word count
+            blur_confidence = calculate_blur_score(image_bytes)
+
+            if word_count < 10:
+                word_confidence = 0.30
+            elif word_count < 20:
+                word_confidence = 0.55
+            elif word_count < 40:
+                word_confidence = 0.75
+            else:
+                word_confidence = 0.92
+
+            # Use lower of blur and word confidence
+            confidence = round(min(blur_confidence, word_confidence), 2)
+            print(f"CONFIDENCE: blur={blur_confidence} words={word_confidence} final={confidence}")
+
             return {
                 "raw_text":        text,
                 "cleaned_text":    cleaned,
-                "confidence_score": 0.95,
+                "confidence_score": confidence,
                 "word_count":      word_count,
-                "source":          "vision_ai"
+                "source":          "image"
             }
         elif response.status_code == 429:
             print("VISION AI: Rate limit hit, falling back to Tesseract")
@@ -111,7 +128,46 @@ Do NOT summarize. Extract every single piece of text exactly as shown."""
         print(f"VISION AI ERROR: {e} — falling back to Tesseract")
         return None
 
+def calculate_blur_score(image_bytes: bytes) -> float:
+    """
+    Calculate blur score using Laplacian variance.
+    Higher = sharper, Lower = more blurry.
+    Returns confidence penalty (0.0 to 1.0).
+    """
+    try:
+        import numpy as np
+        image = Image.open(io.BytesIO(image_bytes))
+        image = image.convert("L")  # grayscale
+        img_array = np.array(image, dtype=np.float32)
 
+        # Laplacian filter — measures edge sharpness
+        laplacian = (
+            img_array[:-2, 1:-1] + img_array[2:, 1:-1] +
+            img_array[1:-1, :-2] + img_array[1:-1, 2:] -
+            4 * img_array[1:-1, 1:-1]
+        )
+        variance = float(np.var(laplacian))
+
+        # Map variance to confidence
+        # Very blurry: variance < 50
+        # Blurry: 50-200
+        # OK: 200-500
+        # Sharp: 500+
+        # For document images:
+        # - Clear documents have high variance (sharp text edges)
+        # - Blurry images have low variance (edges are smooth)
+        # - White space documents naturally have lower variance
+        # So we use a lower threshold to avoid penalizing clean documents
+        if variance < 5:
+            return 0.25   # Very blurry
+        elif variance < 15:
+            return 0.45   # Blurry
+        elif variance < 30:
+            return 0.65   # Slightly blurry
+        else:
+            return 0.92   # Clear
+    except Exception:
+        return 0.92  # Default if detection fails
 # ═══════════════════════════════════════════════════════════════════════════════
 # VALIDATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -262,7 +318,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
             vision_result = extract_text_with_vision(page_bytes, "image/png")
             if vision_result and vision_result.get("word_count", 0) > 5:
                 page_text = vision_result["raw_text"]
-                all_confidences.append(95)
+                all_confidences.append(int(vision_result.get("confidence_score", 0.92) * 100))
                 print(f"VISION AI: PDF page {i+1} — {vision_result['word_count']} words")
             else:
                 # Fall back to Tesseract
