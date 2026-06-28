@@ -263,7 +263,7 @@ def run_full_pipeline(
         or fraud_result["requires_manual_review"]
         or suspiciously_perfect
         or blurry_bill
-        or (len(fraud_result.get("fraud_flags", [])) > 0 and fraud_result["fraud_risk_score"] >= 0.30)
+        or (len(fraud_result.get("fraud_flags", [])) > 0 and fraud_result["fraud_risk_score"] >= 0.29)
         else "approved"
     )
 
