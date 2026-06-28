@@ -253,11 +253,14 @@ def check_fraud(
             "— verify authenticity"
         )
         fraud_risk_score += 0.40
+    # elif ai_signals == 1:
+    #     fraud_flags.append(
+    #         "Invoice has one suspicious pattern — manual verification recommended"
+    #     )
+    #     fraud_risk_score += 0.15
+
     elif ai_signals == 1:
-        fraud_flags.append(
-            "Invoice has one suspicious pattern — manual verification recommended"
-        )
-        fraud_risk_score += 0.15
+        pass  # Single signal — not enough to flag, ignore it
 
     fraud_risk_score = min(round(fraud_risk_score, 2), 1.0)
     requires_manual_review = fraud_risk_score >= 0.5
