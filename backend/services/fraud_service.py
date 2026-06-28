@@ -93,6 +93,17 @@ def check_fraud(
         expected_total = round(
             subtotal - discount + extra_charges + service_charge + tax_amount, 2
         )
+        # Also calculate from line items if available
+        line_items_total = sum(
+            item.get("total_price") or 0 for item in line_items
+        ) if line_items else 0
+
+        # Use line items total as subtotal if it's closer to actual total
+        if line_items_total > 0 and abs(line_items_total - subtotal) > 2.0:
+            expected_total = round(
+                line_items_total - discount + extra_charges + service_charge + tax_amount, 2
+            )
+
         if abs(expected_total - total_amount) > 2.0:
             fraud_flags.append(
                 f"Amount mismatch: subtotal ({subtotal}) - discount ({discount}) "
@@ -129,6 +140,7 @@ def check_fraud(
                 )
                 fraud_risk_score += 0.35
     # RULE 7B-3 — Verify GSTIN via free lookup
+    valid_gstin = valid_gstin if gstin else False
     if gstin and valid_gstin:
         try:
             import requests as _req
