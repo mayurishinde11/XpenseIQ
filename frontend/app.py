@@ -868,7 +868,9 @@ def show_scan_page():
                     if items:
                         st.markdown("**Line Items**")
                         import pandas as pd
-                        st.dataframe(pd.DataFrame(items), use_container_width=True, hide_index=True)
+                        df_items = pd.DataFrame(items)
+                        df_items.columns = [col.replace("_", " ").title() for col in df_items.columns]
+                        st.dataframe(df_items, use_container_width=True, hide_index=True)
                 else:
                     st.markdown(f"""
                     <div style="background:#FFF5F5;border:1px solid #FED7D7;border-radius:12px;
