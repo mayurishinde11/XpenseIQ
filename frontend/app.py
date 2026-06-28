@@ -1322,7 +1322,7 @@ def show_pending_page():
     risk_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for e in expenses:
         risk = e.get("fraud_risk_score", 0) or 0
-        risk_counts["HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.30 else "LOW"] += 1
+        risk_counts["HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.31 else "LOW"] += 1
     col_h, col_m, col_l = st.columns(3, gap="large")
 
     with col_h:
@@ -1380,7 +1380,7 @@ def show_pending_page():
         expense_id = expense.get("id")
         risk = expense.get("fraud_risk_score", 0) or 0
         flags = expense.get("fraud_flags", [])
-        risk_label = "HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.30 else "LOW"
+        risk_label = "HIGH" if risk >= 0.70 else "MEDIUM" if risk >= 0.31 else "LOW"
         risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
         confirm_key = f"confirm_{expense_id}"
 
@@ -1400,7 +1400,7 @@ def show_pending_page():
             with col2:
                 if risk >= 0.70:
                     st.error(f"🔴 Fraud Risk: {risk:.2f} — {risk_label}")
-                elif risk >= 0.30:
+                elif risk >= 0.31:
                     st.warning(f"🟡 Fraud Risk: {risk:.2f} — {risk_label}")
                 else:
                     st.info(f"🟢 Fraud Risk: {risk:.2f} — {risk_label}")
