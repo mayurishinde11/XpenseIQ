@@ -175,9 +175,8 @@ Mayuri Shinde
 
 ## Team Member
 
-   Member               Role
-Mayuri Shinde         Development
-Siddhi Deshmukh       Development
+Mayuri Shinde - Developer
+Siddhi Deshmulh - Developer
 
 ## Guides
  Harshi Shah, Vishwajeet Sonkar
