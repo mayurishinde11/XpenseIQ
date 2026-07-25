@@ -326,7 +326,7 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=1500
@@ -388,7 +388,7 @@ Return ONLY the JSON object. No explanation. No markdown. No backticks.
     except json.JSONDecodeError as e:
         try:
             retry_response = client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "user", "content": f"Extract expense data from this receipt text. Return ONLY valid JSON, no markdown:\n\n{ocr_text[:2000]}"}
                 ],
@@ -452,7 +452,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=500
@@ -489,7 +489,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1000
@@ -555,7 +555,7 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
 """
     try:
         response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=300
